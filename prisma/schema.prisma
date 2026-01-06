@@ -19,6 +19,7 @@ model User {
   email    String    @unique
   name     String
   credit   Int
+  reports  Report[]
 }
 
 model Session {
@@ -29,5 +30,19 @@ model Session {
   conversation  Json?
   report        Json?
   createdBy   String
-  createdOn   String
+  createdOn   DateTime @default(now()) // Changed from String
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  fileName    String
+  fileSize    Int?     // File size in bytes
+  rawText     String?  @db.Text // Extracted text from PDF
+  analysis    String   @db.Text // AI analysis result
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }

@@ -3,6 +3,7 @@ import {
   Drawer as DrawerComponent,
   DrawerContent,
   DrawerHeader,
+  DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
 import Link from "next/link";
@@ -19,15 +20,16 @@ const menuItems = [
     label: "History",
     href: "/history",
   },
+
   {
     id: 3,
-    label: "Pricing",
-    href: "/pricing",
+    label: "Profile",
+    href: "/profile",
   },
   {
     id: 4,
-    label: "Profile",
-    href: "/profile",
+    label: "Report Analysis",
+    href: "/dashboard/report_analysis",
   },
 
 
@@ -41,6 +43,7 @@ export default function Drawer() {
       </DrawerTrigger>
       <DrawerContent>
         <DrawerHeader className="px-6">
+          <DrawerTitle className="sr-only">Navigation Menu</DrawerTitle>
           <div className="">
             {menuItems.map((item) => (
               <Link key={item.id} href={item.href} className="mr-10 font-medium text-gray-500 hover:text-gray-900 flex items-center justify-start text-start gap-2">

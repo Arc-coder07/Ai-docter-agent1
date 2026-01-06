@@ -72,8 +72,12 @@ function MedicalVoiceAgent() {
   }
 
   // --- Main Effect for Vapi Listeners ---
+
   useEffect(() => {
     if (sessionId) getSessionDetails();
+
+    // 1. CLEANUP: Remove any existing listeners to prevent duplicates (Fixes Double Text)
+    vapi.removeAllListeners();
 
     // Event: Call Started
     vapi.on('call-start', () => {
@@ -86,7 +90,7 @@ function MedicalVoiceAgent() {
     vapi.on('call-end', () => {
       console.log('Call ended');
       stopCallUI();
-      saveConversation(); // <--- Trigger Save Function Here
+      saveConversation(); 
     });
 
     // Event: Speech/Audio Status
@@ -96,7 +100,6 @@ function MedicalVoiceAgent() {
     // Event: Transcripts & Messages
     vapi.on('message', (message: any) => {
       if (message.type === 'transcript') {
-        // Filter out system messages, only keep user/assistant
         if (message.role !== 'user' && message.role !== 'assistant') return;
 
         // Handle Real-time Captions (Partial)
@@ -106,28 +109,91 @@ function MedicalVoiceAgent() {
         } 
         // Handle Final Messages
         else {
-           const newMessage: Message = {
-             role: message.role,
-             content: message.transcript,
-             timestamp: Date.now()
-           };
+           // 2. DEDUPLICATION: Check if this message is identical to the last one
+           setMessages(prev => {
+             const lastMsg = prev[prev.length - 1];
+             // If content matches and was received < 1 second ago, ignore it
+             if (lastMsg && lastMsg.content === message.transcript && (Date.now() - (lastMsg.timestamp || 0) < 1000)) {
+               return prev;
+             }
+             
+             const newMessage: Message = {
+               role: message.role,
+               content: message.transcript,
+               timestamp: Date.now()
+             };
+             return [...prev, newMessage];
+           });
            
-           // Clear captions
+           // Clear captions immediately
            if (message.role === 'assistant') setAssistantCaption("");
            if (message.role === 'user') setUserCaption("");
-
-           // Update State
-           setMessages(prev => [...prev, newMessage]);
         }
       }
     });
 
     // Cleanup on unmount
     return () => {
-      vapi.stop();
-      vapi.removeAllListeners();
+      // NOTE: We do NOT call vapi.stop() here to prevent dropping call on hot-reload
+      vapi.removeAllListeners(); 
     }
-  }, [sessionId]) // Dependency array kept clean thanks to Ref pattern
+  }, [sessionId])
+  // useEffect(() => {
+  //   if (sessionId) getSessionDetails();
+
+  //   // Event: Call Started
+  //   vapi.on('call-start', () => {
+  //     console.log('Call started');
+  //     setIsCallActive(true);
+  //     setIsLoading(false);
+  //   });
+
+  //   // Event: Call Ended
+  //   vapi.on('call-end', () => {
+  //     console.log('Call ended');
+  //     stopCallUI();
+  //     saveConversation(); // <--- Trigger Save Function Here
+  //   });
+
+  //   // Event: Speech/Audio Status
+  //   vapi.on('speech-start', () => setIsSpeaking(true));
+  //   vapi.on('speech-end', () => setIsSpeaking(false));
+
+  //   // Event: Transcripts & Messages
+  //   vapi.on('message', (message: any) => {
+  //     if (message.type === 'transcript') {
+  //       // Filter out system messages, only keep user/assistant
+  //       if (message.role !== 'user' && message.role !== 'assistant') return;
+
+  //       // Handle Real-time Captions (Partial)
+  //       if (message.transcriptType === 'partial') {
+  //         if (message.role === 'assistant') setAssistantCaption(message.transcript);
+  //         if (message.role === 'user') setUserCaption(message.transcript);
+  //       } 
+  //       // Handle Final Messages
+  //       else {
+  //          const newMessage: Message = {
+  //            role: message.role,
+  //            content: message.transcript,
+  //            timestamp: Date.now()
+  //          };
+           
+  //          // Clear captions
+  //          if (message.role === 'assistant') setAssistantCaption("");
+  //          if (message.role === 'user') setUserCaption("");
+
+  //          // Update State
+  //          setMessages(prev => [...prev, newMessage]);
+  //       }
+  //     }
+  //   });
+
+  //   // Cleanup on unmount
+  //   return () => {
+  //     vapi.stop();
+  //     vapi.removeAllListeners();
+  //   }
+  // }, [sessionId]) // Dependency array kept clean thanks to Ref pattern
 
   // Timer Logic
   useEffect(() => {
@@ -142,7 +208,16 @@ function MedicalVoiceAgent() {
   const getSessionDetails = async () => {
     try {
       const response = await axios.get(`/api/session-chat?sessionId=${sessionId}`)
-      setSession(response.data)
+      const sessionData = response.data;
+      setSession(sessionData);
+
+      // --- FIX: Load existing conversation history ---
+      if (sessionData.conversation && Array.isArray(sessionData.conversation)) {
+        console.log("Loading past conversation...", sessionData.conversation);
+        setMessages(sessionData.conversation);
+      }
+      // -----------------------------------------------
+
     } catch (error) {
       console.error("Error fetching session:", error)
     }
@@ -206,7 +281,7 @@ function MedicalVoiceAgent() {
         )}
         
         <h2 className='text-lg font-bold mt-2'>{session?.selectedDocter?.specialist || "AI Doctor"}</h2>
-        <p className='text-sm text-gray-500'>Powered by Vapi</p>
+        <p className='text-sm text-gray-500'>Analysis agent</p>
 
         <ConversationDisplay
           messages={messages}
@@ -219,11 +294,11 @@ function MedicalVoiceAgent() {
 
         {!isCallActive ? (
           <Button className='mt-6' onClick={startCall} disabled={isLoading}>
-            {isLoading ? "Connecting..." : <><PhoneCall className='w-4 h-4 mr-2' /> Start Call</>}
+            {isLoading ? "Connecting..." : <><PhoneCall className='w-4 h-4 mr-2' /> Start</>}
           </Button>
         ) : (
           <Button className='mt-6 bg-red-500 hover:bg-red-600' onClick={stopCall}>
-            <StopCircle className='w-4 h-4 mr-2' /> End Call
+            <StopCircle className='w-4 h-4 mr-2' /> End Session
           </Button>
         )}
       </div>

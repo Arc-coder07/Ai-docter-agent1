@@ -21,7 +21,7 @@ function HeroPill() {
       <div className="w-fit rounded-full bg-accent px-3 py-1 text-center text-xs font-medium text-accent-foreground sm:text-sm">
         📣 Announcement
       </div>
-      <p className="text-xs font-medium text-accent sm:text-sm">
+      <p className="text-xs font-medium text-black sm:text-sm ">
         Introducing MedSage – Your AI Medical Assistant!
       </p>
       <svg
@@ -80,7 +80,7 @@ function HeroTitles() {
           ease: [0.16, 1, 0.3, 1],
         }}
       >
-        Experience real-time voice conversations with an AI medical assistant.
+        {/* Experience real-time voice conversations with an AI medical assistant. */}
       </motion.p>
     </div>
   );
@@ -104,7 +104,7 @@ function HeroCTA() {
             "w-full sm:w-auto text-background flex gap-2 px-8 py-6 text-lg font-medium"
           )}
         >
-          <Icons.logo className="h-6 w-6" />
+          
           {user ? "Dashboard" : "Start a consultation"}
         </Link>
       </motion.div>

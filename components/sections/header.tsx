@@ -6,11 +6,10 @@ import { siteConfig } from "@/lib/config";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useUser, UserButton } from "@clerk/nextjs";
+import { UserButton, SignedIn, SignedOut } from "@clerk/nextjs";
 
 export default function Header() {
   const [addBorder, setAddBorder] = useState(false);
-  const { user } = useUser();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -31,7 +30,7 @@ export default function Header() {
   return (
     <header
       className={
-        "relative sticky top-0 z-50 py-2 bg-background/60 backdrop-blur px-2 sm:px-4"
+        "sticky top-0 z-50 py-2 bg-background/60 backdrop-blur px-2 sm:px-4"
       }
     >
       <div className="flex justify-between items-center container">
@@ -40,49 +39,72 @@ export default function Header() {
           title="brand-logo"
           className="relative mr-6 flex items-center space-x-2 px-0 sm:pl-20"
         >
-          <Icons.logo className="w-auto h-[40px]" />
+          {/* <Icons.logo className="w-auto h-[40px]" /> */}
           <span className="font-bold text-xl">{siteConfig.name}</span>
         </Link>
 
+        {/* DESKTOP MENU */}
         <div className="hidden lg:block">
-          <div className="flex items-center ">
-
+          <div className="flex items-center">
             <div className="gap-2 flex">
-              <Link
-                href={user ? "/dashboard" : "/sign-in"}
-                className={buttonVariants({ variant: "outline" })}
-              >
-                {user ? "Dashboard" : "Login"}
-              </Link>
-              {user && (
+              
+              {/* Option 1: User IS Logged In */}
+              <SignedIn>
+                <Link
+                  href="/dashboard"
+                  className={buttonVariants({ variant: "outline" })}
+                >
+                  Dashboard
+                </Link>
                 <UserButton />
-              )}
-              {!user && (
+              </SignedIn>
+
+              {/* Option 2: User IS NOT Logged In */}
+              <SignedOut>
+                <Link
+                  href="/sign-in"
+                  className={buttonVariants({ variant: "outline" })}
+                >
+                  Login
+                </Link>
                 <Link
                   href="/sign-up"
                   className={cn(
                     buttonVariants({ variant: "default" }),
-                    "w-full sm:w-auto text-background flex gap-2"
+                    "w-full sm:w-auto text-background"
                   )}
                 >
-                  <Icons.logo className="h-6 w-6" />
                   Start a Consultation
                 </Link>
-              )
-              }
+              </SignedOut>
 
             </div>
           </div>
         </div>
+
+        {/* MOBILE MENU */}
         <div className="mt-2 cursor-pointer block lg:hidden">
           <div className="flex items-center gap-4">
-            <Link
-              href={user ? "/dashboard" : "/sign-in"}
-              className={buttonVariants({ variant: "outline" })}
-            >
-              {user ? "Dashboard" : "Login"}
-            </Link>
-            <UserButton />
+            
+            <SignedIn>
+              <Link
+                href="/dashboard"
+                className={buttonVariants({ variant: "outline" })}
+              >
+                Dashboard
+              </Link>
+              <UserButton />
+            </SignedIn>
+
+            <SignedOut>
+              <Link
+                href="/sign-in"
+                className={buttonVariants({ variant: "outline" })}
+              >
+                Login
+              </Link>
+            </SignedOut>
+
           </div>
         </div>
       </div>

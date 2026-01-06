@@ -36,7 +36,7 @@ function AppHeader() {
   return (
     <header
       className={
-        "relative sticky top-0 z-50 py-2 bg-background/60 backdrop-blur px-2 sm:px-4"
+        "sticky top-0 z-50 py-2 bg-background/60 backdrop-blur px-2 sm:px-4"
       }
     >
       <div className="flex justify-between items-center container">
@@ -45,7 +45,7 @@ function AppHeader() {
           title="brand-logo"
           className="relative mr-6 flex items-center space-x-2 px-0 sm:pl-20"
         >
-          <Icons.logo className="w-auto h-[40px]" />
+          {/* <Icons.logo className="w-auto h-[40px]" /> */}
           <span className="font-bold text-xl">{siteConfig.name}</span>
         </Link>
 
@@ -64,7 +64,7 @@ function AppHeader() {
           </div>
         </div>
 
-        <div className="mt-2 cursor-pointer block lg:hidden">
+        <div className="mt-2 cursor-pointer block">
           <Drawer />
         </div>
       </div>

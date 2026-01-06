@@ -15,7 +15,9 @@ export async function POST(request: NextRequest) {
         sessionId,
         createdBy: user?.emailAddresses[0]?.emailAddress || 'unknown',
         notes: notes || "",
-        createdOn: new Date().toString(),
+        // createdOn: new Date().toString(), <--- DELETE THIS LINE
+        // The database @default(now()) handles this automatically.
+        // If you keep it, the app crashes with Error 500.
         selectedDocter: selectedDoctor || null,
       }
     });

@@ -15,7 +15,7 @@ export default function Footer() {
               title={siteConfig.name}
               className="flex items-center space-x-2"
             >
-              <Icons.logo className="w-auto h-[30px]" />
+              {/* <Icons.logo className="w-auto h-[30px]" /> */}
               <span className="font-bold text-xl">{siteConfig.name}</span>
             </Link>
           </div>

@@ -23,12 +23,14 @@ A Next.js application that provides an AI-powered medical assistant with real-ti
    ```bash
    npm install
    ```
-3. Create a `.env` file with the following variables:
+3. Create a `.env.local` file with the following variables:
    ```
    # API Keys
    NEXT_PUBLIC_ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
    MURF_API_KEY=your_murf_api_key_here
    OPEN_ROUTER_API_KEY=your_openrouter_api_key_here
+   GEMINI_API_KEY=your_gemini_api_key_here
+   # Get your Gemini API key from: https://makersuite.google.com/app/apikey
 
    # Authentication (Clerk)
    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key_here
@@ -100,5 +102,14 @@ If you encounter issues with the voice conversation functionality:
    - Check if the microphone indicator turns green after the AI speaks
    - Try speaking louder or moving closer to your microphone
    - Check if your browser's console shows any WebSocket errors
+
+8. **Gemini API / Medical Report Analysis**:
+   - If you see "AI service error. Please check Gemini API key configuration":
+     - Ensure `GEMINI_API_KEY` is set in your `.env.local` file (not `.env`)
+     - Get your API key from: https://makersuite.google.com/app/apikey
+     - Restart your dev server after adding the key: `npm run dev`
+     - The API key should start with "AIza" and be at least 30 characters long
+   - If you see quota errors, check your Google Cloud Console for API usage limits
+   - For PDF analysis, ensure the PDF is text-based (not scanned images)
 
 

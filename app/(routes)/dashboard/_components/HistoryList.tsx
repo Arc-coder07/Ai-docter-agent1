@@ -42,12 +42,12 @@ function HistoryList() {
       <h2 className="font-bold text-lg mb-5">Previous Consultations</h2>
       
       {history.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-5 mt-5 p-7 border-2 border-dashed border-gray-200 rounded-2xl">
+        <div className="flex flex-col items-center justify-center gap-6 mt-5 p-12 border-2 border-dashed border-gray-200 rounded-2xl min-h-[650px]">
           <Image
             src="/medical-assistance.png"
             alt="No consultations"
-            width={150}
-            height={150}
+            width={220}
+            height={220}
           />
           <h2 className="font-bold">No Consultations Yet</h2>
           <p className="text-gray-500">You don&apos;t have any consultations yet.</p>
@@ -65,9 +65,10 @@ function HistoryList() {
                   <div>
                     <h3 className='font-bold text-gray-800'>Consultation #{item.id}</h3>
                     <span className='text-xs text-gray-500 flex items-center gap-1'>
-                      <Calendar className='w-3 h-3' />
-                      {new Date(item.createdOn).toLocaleDateString()}
-                    </span>
+  <Calendar className='w-3 h-3' />
+  {/* FIX: Handle both String and Date objects safely */}
+  {item.createdOn ? new Date(item.createdOn).toLocaleDateString() : 'Unknown Date'}
+</span>
                   </div>
                 </div>
                 
