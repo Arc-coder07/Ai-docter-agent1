@@ -16,10 +16,12 @@ export const useApiClient = () => {
 
     const fetcher = async (url: string, options: any = {}) => {
         const token = await getToken();
+        const config = { ...options, headers: { ...options.headers } };
+
         if (token) {
-            apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            config.headers['Authorization'] = `Bearer ${token}`;
         }
-        return apiClient(url, options);
+        return apiClient(url, config);
     };
 
     return fetcher;

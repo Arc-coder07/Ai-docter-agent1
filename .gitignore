@@ -134,3 +134,24 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+
+# Model cache
+backend/app/agents/xray_detection/model_cache/
+
+# Uploads
+backend/uploads/
+
+# External projects
+Multi-Agent-Medical-Assistant1/
+health-report/
+
+# Model weights
+*.pth
+*.pth.tar
+*.h5

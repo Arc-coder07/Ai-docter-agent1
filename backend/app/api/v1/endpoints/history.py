@@ -15,9 +15,10 @@ router = APIRouter()
 async def sync_session(
     session_id: str,
     request: SyncConversationRequest,
-    clerk_user_id: str = Depends(get_current_user),
+    claims: dict = Depends(get_current_user),
     db: Session = Depends(get_session)
 ):
+    clerk_user_id = claims["sub"]
     # Verify ownership
     try:
         session_uuid = uuid.UUID(session_id)
@@ -63,9 +64,10 @@ async def sync_session(
 
 @router.get("/sessions")
 async def get_sessions(
-    clerk_user_id: str = Depends(get_current_user),
+    claims: dict = Depends(get_current_user),
     db: Session = Depends(get_session)
 ):
+    clerk_user_id = claims["sub"]
     # Find user
     statement = select(User).where(User.clerk_id == clerk_user_id)
     user = db.exec(statement).first()
@@ -80,9 +82,10 @@ async def get_sessions(
 @router.get("/sessions/{session_id}")
 async def get_session_messages(
     session_id: str,
-    clerk_user_id: str = Depends(get_current_user),
+    claims: dict = Depends(get_current_user),
     db: Session = Depends(get_session)
 ):
+    clerk_user_id = claims["sub"]
     # Verify ownership
     try:
         session_uuid = uuid.UUID(session_id)
@@ -111,9 +114,10 @@ async def get_session_messages(
 @router.delete("/sessions/{session_id}")
 async def delete_session(
     session_id: str,
-    clerk_user_id: str = Depends(get_current_user),
+    claims: dict = Depends(get_current_user),
     db: Session = Depends(get_session)
 ):
+    clerk_user_id = claims["sub"]
     try:
         session_uuid = uuid.UUID(session_id)
     except ValueError:
@@ -131,6 +135,98 @@ async def delete_session(
     if not user or chat_session.user_id != user.id:
          raise HTTPException(status_code=403, detail="Not authorized")
 
+    # Manual Cascade: Delete messages first
+    messages_statement = select(ChatMessage).where(ChatMessage.session_id == session_uuid)
+    messages = db.exec(messages_statement).all()
+    for msg in messages:
+        db.delete(msg)
+
     db.delete(chat_session)
     db.commit()
     return {"status": "success"}
+
+
+@router.get("/sessions/{session_id}/summary")
+async def generate_session_summary(
+    session_id: str,
+    claims: dict = Depends(get_current_user),
+    db: Session = Depends(get_session)
+):
+    """Generate an AI-powered summary report for a session."""
+    clerk_user_id = claims["sub"]
+    
+    try:
+        session_uuid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Session ID")
+    
+    # Get session
+    statement = select(ChatSession).where(ChatSession.id == session_uuid)
+    chat_session = db.exec(statement).first()
+    
+    if not chat_session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Verify ownership
+    statement = select(User).where(User.clerk_id == clerk_user_id)
+    user = db.exec(statement).first()
+    
+    if not user or chat_session.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Get messages
+    statement = select(ChatMessage).where(
+        ChatMessage.session_id == session_uuid
+    ).order_by(ChatMessage.created_at)
+    messages = db.exec(statement).all()
+    
+    if not messages:
+        return {
+            "summary": None,
+            "message": "No messages found to summarize"
+        }
+    
+    # Build conversation text
+    conversation_text = "\n".join([
+        f"{msg.role.upper()}: {msg.content}" 
+        for msg in messages
+    ])
+    
+    # Generate summary using Groq (via config)
+    try:
+        from app.agents.config import Config
+        config = Config()
+        
+        summary_prompt = f"""Analyze this medical consultation and provide a structured summary report.
+
+**Conversation:**
+{conversation_text}
+
+**Generate a summary with the following sections:**
+
+1. **Chief Complaint**: The main reason for the consultation (1-2 sentences)
+2. **Key Symptoms Discussed**: List the main symptoms mentioned
+3. **Recommendations Given**: What was advised or recommended
+4. **Follow-up Actions**: Any next steps mentioned
+
+Format your response using markdown with clear headers."""
+
+        response = config.rag.summarizer_model.invoke(summary_prompt)
+        summary_text = response.content if hasattr(response, 'content') else str(response)
+        
+        # Update session with summary
+        chat_session.summary = summary_text
+        db.commit()
+        
+        return {
+            "session_id": str(session_uuid),
+            "title": chat_session.title,
+            "conversation_type": chat_session.conversation_type,
+            "agent_used": chat_session.agent_used,
+            "summary": summary_text,
+            "generated_at": chat_session.created_at.isoformat() if chat_session.created_at else None
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate summary: {str(e)}")
+

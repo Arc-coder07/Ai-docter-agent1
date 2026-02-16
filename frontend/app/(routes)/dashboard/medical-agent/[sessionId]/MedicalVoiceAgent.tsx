@@ -1,8 +1,8 @@
 "use client"
 import { useApiClient } from "@/lib/api"
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import React, { useState, useEffect, useRef } from 'react'
-import { Circle, PhoneCall, StopCircle } from 'lucide-react'
+import { ArrowLeft, Circle, PhoneCall, StopCircle } from 'lucide-react'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Doctor } from '../../_components/DoctorsList'
@@ -21,11 +21,12 @@ type Message = {
 
 type Session = {
   id: number;
-  selectedDocter: Doctor | null;
+  selectedDoctor: Doctor | null;
 }
 
 function MedicalVoiceAgent() {
   const { sessionId } = useParams()
+  const router = useRouter()
   const [session, setSession] = useState<Session>()
   const apiClient = useApiClient()
 
@@ -229,7 +230,7 @@ function MedicalVoiceAgent() {
       // Mock session for UI to not break
       setSession({
         id: sessionId as any,
-        selectedDocter: {
+        selectedDoctor: {
           image: "/medical-assistance.png",
           specialist: "Medical Assistant",
           description: "Your AI Health Companion",
@@ -281,20 +282,30 @@ function MedicalVoiceAgent() {
   return (
     <div className='p-5 border-2 rounded-xl bg-secondary'>
       <div className='flex items-center justify-between'>
-        <h2 className='p-1 px-2 border rounded-md flex items-center gap-2'>
-          {isCallActive ? (
-            <><Circle className="text-green-500 animate-pulse fill-green-500" /> Connected</>
-          ) : (
-            <><Circle /> Not Connected</>
-          )}
-        </h2>
+        <div className='flex items-center gap-3'>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.push('/dashboard')}
+            className="hover:bg-gray-100"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <h2 className='p-1 px-2 border rounded-md flex items-center gap-2'>
+            {isCallActive ? (
+              <><Circle className="text-green-500 animate-pulse fill-green-500" /> Connected</>
+            ) : (
+              <><Circle /> Not Connected</>
+            )}
+          </h2>
+        </div>
         <h2 className='text-xl font-bold text-gray-500'>{formatTime(callDuration)}</h2>
       </div>
 
       <div className='flex flex-col items-center gap-2 mt-10 justify-center'>
-        {session?.selectedDocter?.image ? (
+        {session?.selectedDoctor?.image ? (
           <Image
-            src={session.selectedDocter.image}
+            src={session.selectedDoctor.image}
             alt="Doctor"
             width={120}
             height={120}
@@ -306,7 +317,7 @@ function MedicalVoiceAgent() {
           </div>
         )}
 
-        <h2 className='text-lg font-bold mt-2'>{session?.selectedDocter?.specialist || "AI Doctor"}</h2>
+        <h2 className='text-lg font-bold mt-2'>{session?.selectedDoctor?.specialist || "AI Doctor"}</h2>
         <p className='text-sm text-gray-500'>Analysis agent</p>
 
         <ConversationDisplay
