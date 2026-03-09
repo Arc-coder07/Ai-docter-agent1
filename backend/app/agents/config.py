@@ -6,6 +6,7 @@ Adapted for integration with main backend - uses shared env vars
 import os
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 
 # Load environment variables from .env file
@@ -44,47 +45,49 @@ class WebSearchConfig:
 
 class RAGConfig:
     def __init__(self):
+        """Initialize RAG configuration."""
         # Get base path for data relative to this file's parent
         base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
+        # Local configuration
         self.vector_db_type = "qdrant"
-        self.embedding_dim = 768  # Gemini text-embedding-004 dimension
+        self.embedding_dim = 384  # all-MiniLM-L6-v2 dimension
         self.distance_metric = "Cosine"
         self.use_local = True
         self.vector_local_path = os.path.join(base_path, "data/qdrant_db")
         self.doc_local_path = os.path.join(base_path, "data/docs_db")
         self.parsed_content_dir = os.path.join(base_path, "data/parsed_docs")
-        self.url = os.getenv("QDRANT_URL")
-        self.api_key = os.getenv("QDRANT_API_KEY")
+        self.retrieval_top_k = 5
+        self.min_retrieval_confidence = 0.5
+        
         self.collection_name = "medical_assistance_rag"
         self.chunk_size = 512
         self.chunk_overlap = 50
         
-        # Initialize Google Gemini Embeddings
-        self.embedding_model = GoogleGenerativeAIEmbeddings(
-            model="models/text-embedding-004",
-            google_api_key=GOOGLE_API_KEY
+        # Initialize HuggingFace Embeddings
+        self.embedding_model = HuggingFaceEmbeddings(
+            model_name="all-MiniLM-L6-v2"
         )
         
-        # Use Groq for RAG generation
-        self.llm = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            api_key=GROQ_API_KEY,
+        # Use Gemini for RAG tasks to handle large contexts and avoid Groq rate limits
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=GOOGLE_API_KEY,
             temperature=0.3
         )
-        self.summarizer_model = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            api_key=GROQ_API_KEY,
+        self.summarizer_model = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=GOOGLE_API_KEY,
             temperature=0.5
         )
-        self.chunker_model = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            api_key=GROQ_API_KEY,
+        self.chunker_model = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=GOOGLE_API_KEY,
             temperature=0.0
         )
-        self.response_generator_model = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            api_key=GROQ_API_KEY,
+        self.response_generator_model = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=GOOGLE_API_KEY,
             temperature=0.3
         )
         self.top_k = 5

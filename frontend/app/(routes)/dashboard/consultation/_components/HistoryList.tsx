@@ -4,11 +4,10 @@ import React, { useEffect, useState } from 'react'
 import AddNewSession from './AddNewSession'
 import Link from 'next/link'
 import { useApiClient } from "@/lib/api"
-import { Calendar, Clock, FileText } from 'lucide-react'
+import { Calendar, Clock, MessageSquare } from 'lucide-react'
 
-// Define the Session type
 type Session = {
-  id: string; // Changed to string for UUID
+  id: string;
   sessionId: string;
   createdOn: string;
   conversation: any[];
@@ -28,12 +27,11 @@ function HistoryList() {
     try {
       setLoading(true);
       const result = await apiClient('/history/sessions');
-      // Map Python backend response to Frontend Session type
       const mappedData = result.data.map((item: any) => ({
         id: item.id,
         sessionId: item.id,
         createdOn: item.created_at,
-        conversation: [], // Backend doesn't send full conversation list yet for summary
+        conversation: [],
         notes: item.title
       }));
       setHistory(mappedData);
@@ -44,47 +42,60 @@ function HistoryList() {
     }
   }
 
-  if (loading) return <div className="mt-10 text-gray-400">Loading history...</div>
+  const formatDate = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric'
+      })
+    } catch {
+      return 'Unknown'
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className='space-y-3'>
+        <h2 className="font-bold text-lg text-gray-900">Recent Sessions</h2>
+        {[1, 2, 3].map(i => (
+          <div key={i} className="rounded-xl border border-gray-100 p-3 animate-pulse">
+            <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
+            <div className="h-3 bg-gray-100 rounded w-1/2" />
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
-    <div className='mt-10'>
-      <h2 className="font-bold text-lg mb-5">Previous Consultations</h2>
+    <div>
+      <h2 className="font-bold text-lg text-gray-900 mb-4">Recent Sessions</h2>
 
       {history.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-6 mt-5 p-12 border-2 border-dashed border-gray-200 rounded-2xl min-h-[650px]">
-          <Image
-            src="/medical-assistance.png"
-            alt="No consultations"
-            width={220}
-            height={220}
-          />
-          <h2 className="font-bold">No Consultations Yet</h2>
-          <p className="text-gray-500">You don&apos;t have any consultations yet.</p>
+        <div className="flex flex-col items-center justify-center gap-4 p-8 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/50">
+          <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center">
+            <MessageSquare className="w-7 h-7 text-gray-400" />
+          </div>
+          <div className="text-center">
+            <h3 className="font-semibold text-gray-600 text-sm">No Sessions Yet</h3>
+            <p className="text-xs text-gray-400 mt-1">Start a consultation to see history</p>
+          </div>
           <AddNewSession />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {history.map((item) => (
+        <div className="space-y-2">
+          {history.slice(0, 8).map((item) => (
             <Link key={item.id} href={`/dashboard/medical-agent/${item.sessionId}`} className="block">
-              <div className='border rounded-xl p-4 hover:shadow-md transition-all cursor-pointer bg-white'>
-                <div className='flex items-center gap-3 mb-3'>
-                  <div className='p-2 bg-blue-100 rounded-full'>
-                    <FileText className='text-blue-600 w-5 h-5' />
-                  </div>
-                  <div>
-                    <h3 className='font-bold text-gray-800'>Consultation #{item.id}</h3>
-                    <span className='text-xs text-gray-500 flex items-center gap-1'>
-                      <Calendar className='w-3 h-3' />
-                      {/* FIX: Handle both String and Date objects safely */}
-                      {item.createdOn ? new Date(item.createdOn).toLocaleDateString() : 'Unknown Date'}
-                    </span>
-                  </div>
+              <div className='rounded-xl border border-gray-100 p-3 hover:border-gray-200 hover:shadow-sm transition-all bg-white group'>
+                <h3 className='font-medium text-sm text-gray-800 line-clamp-1 group-hover:text-blue-600 transition-colors'>
+                  {item.notes || 'Consultation'}
+                </h3>
+                <div className='flex items-center gap-2 mt-1.5'>
+                  <span className='text-[10px] text-gray-400 flex items-center gap-1'>
+                    <Calendar className='w-3 h-3' />
+                    {formatDate(item.createdOn)}
+                  </span>
                 </div>
-
-                <p className='text-sm text-gray-500 line-clamp-2'>
-                  {/* Show preview of last message or notes */}
-                  {item.notes || "No preview available"}
-                </p>
               </div>
             </Link>
           ))}

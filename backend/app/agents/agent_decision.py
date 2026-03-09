@@ -106,8 +106,8 @@ class AgentDecision(TypedDict):
 def create_agent_graph():
     """Create and configure the LangGraph for agent orchestration."""
 
-    # Initialize guardrails with the same LLM used elsewhere
-    guardrails = LocalGuardrails(config.rag.llm)
+    # Initialize guardrails with Groq (avoids Gemini quota issues for text-only checks)
+    guardrails = LocalGuardrails(config.agent_decision.llm)
 
     # LLM
     decision_model = config.agent_decision.llm
@@ -140,26 +140,34 @@ def create_agent_graph():
         
         # Check input through guardrails if text is present
         if input_text:
-            is_allowed, message = guardrails.check_input(input_text)
-            if not is_allowed:
-                # If input is blocked, return early with guardrail message
-                print(f"Selected agent: INPUT GUARDRAILS, Message: ", message)
-                return {
-                    **state,
-                    "messages": message,
-                    "agent_name": "INPUT_GUARDRAILS",
-                    "has_image": False,
-                    "image_type": None,
-                    "bypass_routing": True  # flag to end flow
-                }
+            try:
+                is_allowed, message = guardrails.check_input(input_text)
+                if not is_allowed:
+                    # If input is blocked, return early with guardrail message
+                    print(f"Selected agent: INPUT GUARDRAILS, Message: ", message)
+                    return {
+                        **state,
+                        "messages": message,
+                        "agent_name": "INPUT_GUARDRAILS",
+                        "has_image": False,
+                        "image_type": None,
+                        "bypass_routing": True  # flag to end flow
+                    }
+            except Exception as e:
+                # If guardrails fail (e.g., API quota), allow input through with a warning
+                print(f"[Warning] Guardrails check failed (allowing input through): {e}")
         
         # Original image processing code
         if isinstance(current_input, dict) and "image" in current_input:
             has_image = True
             image_path = current_input.get("image", None)
-            image_type_response = AgentConfig.image_analyzer.analyze_image(image_path)
-            image_type = image_type_response['image_type']
-            print("ANALYZED IMAGE TYPE: ", image_type)
+            try:
+                image_type_response = AgentConfig.image_analyzer.analyze_image(image_path)
+                image_type = image_type_response['image_type']
+                print("ANALYZED IMAGE TYPE: ", image_type)
+            except Exception as e:
+                print(f"[Warning] Image classification failed (defaulting to OTHER): {e}")
+                image_type = "OTHER"
         
         return {
             **state,
@@ -209,23 +217,31 @@ def create_agent_graph():
         Based on this information, which agent should handle this query?
         """
         
-        # Make the decision
-        decision = decision_chain.invoke({"input": decision_input})
+        try:
+            # Make the decision
+            decision = decision_chain.invoke({"input": decision_input})
 
-        # Decided agent
-        print(f"Decision: {decision['agent']}")
-        
-        # Update state with decision
-        updated_state = {
-            **state,
-            "agent_name": decision["agent"],
-        }
-        
-        # Route based on agent name and confidence
-        if decision["confidence"] < AgentConfig.CONFIDENCE_THRESHOLD:
-            return {"agent_state": updated_state, "next": "needs_validation"}
-        
-        return {"agent_state": updated_state, "next": decision["agent"]}
+            # Decided agent
+            print(f"Decision: {decision['agent']}")
+            
+            # Update state with decision
+            updated_state = {
+                **state,
+                "agent_name": decision["agent"],
+            }
+            
+            # Route based on agent name and confidence
+            if decision["confidence"] < AgentConfig.CONFIDENCE_THRESHOLD:
+                return {"agent_state": updated_state, "next": "needs_validation"}
+            
+            return {"agent_state": updated_state, "next": decision["agent"]}
+        except Exception as e:
+            print(f"Error in route_to_agent decision: {e}")
+            # Fallback to conversation agent on any decision error
+            return {
+                "agent_state": {**state, "agent_name": "CONVERSATION_AGENT"},
+                "next": "CONVERSATION_AGENT"
+            }
 
     # Define agent execution functions (these will be implemented in their respective modules)
     def run_conversation_agent(state: AgentState) -> AgentState:
@@ -448,11 +464,19 @@ def create_agent_graph():
         return "check_validation"  # No transition needed if confidence is high and info is sufficient
     
     def run_brain_tumor_agent(state: AgentState) -> AgentState:
-        """Handle brain MRI image analysis."""
+        """Handle brain MRI image analysis using HuggingFace ViT model."""
 
         print(f"Selected agent: BRAIN_TUMOR_AGENT")
 
-        response = AIMessage(content="This would be handled by the brain tumor agent, analyzing the MRI image.")
+        current_input = state["current_input"]
+        image_path = current_input.get("image", None) if isinstance(current_input, dict) else None
+
+        try:
+            result = AgentConfig.image_analyzer.classify_brain_tumor(image_path)
+            response = AIMessage(content=result)
+        except Exception as e:
+            print(f"Brain tumor analysis error: {e}")
+            response = AIMessage(content=f"Error analyzing brain MRI image: {str(e)}")
 
         return {
             **state,
@@ -470,16 +494,20 @@ def create_agent_graph():
         print(f"Selected agent: CHEST_XRAY_AGENT")
 
         # classify chest x-ray into covid or normal
-        predicted_class = AgentConfig.image_analyzer.classify_chest_xray(image_path)
+        result = AgentConfig.image_analyzer.classify_chest_xray(image_path)
 
-        if predicted_class == "covid19":
-            response = AIMessage(content="The analysis of the uploaded chest X-ray image indicates a **POSITIVE** result for **COVID-19**.")
-        elif predicted_class == "normal":
-            response = AIMessage(content="The analysis of the uploaded chest X-ray image indicates a **NEGATIVE** result for **COVID-19**, i.e., **NORMAL**.")
+        if result and isinstance(result, dict):
+            predicted_class = result.get("class")
+            confidence = result.get("confidence", 0.0)
+            
+            if predicted_class == "covid19":
+                response = AIMessage(content=f"The analysis of the uploaded chest X-ray image indicates a **POSITIVE** result for **COVID-19**.\n\n**Confidence Score:** {confidence}%")
+            elif predicted_class == "normal":
+                response = AIMessage(content=f"The analysis of the uploaded chest X-ray image indicates a **NEGATIVE** result for **COVID-19**, i.e., **NORMAL**.\n\n**Confidence Score:** {confidence}%")
+            else:
+                response = AIMessage(content="The uploaded image is not clear enough to make a diagnosis / the image is not a medical image.")
         else:
-            response = AIMessage(content="The uploaded image is not clear enough to make a diagnosis / the image is not a medical image.")
-
-        # response = AIMessage(content="This would be handled by the chest X-ray agent, analyzing the image.")
+            response = AIMessage(content="Error computing the classification. Please try again.")
 
         return {
             **state,
@@ -496,15 +524,14 @@ def create_agent_graph():
 
         print(f"Selected agent: SKIN_LESION_AGENT")
 
-        # classify chest x-ray into covid or normal
-        predicted_mask = AgentConfig.image_analyzer.segment_skin_lesion(image_path)
+        # perform skin segmentation
+        result = AgentConfig.image_analyzer.segment_skin_lesion(image_path)
 
-        if predicted_mask:
-            response = AIMessage(content="Following is the analyzed **segmented** output of the uploaded skin lesion image:")
+        if result and result.get("success"):
+            confidence = result.get("confidence", 0.0)
+            response = AIMessage(content=f"Following is the analyzed **segmented** output of the uploaded skin lesion image:\n\n**Segmentation Confidence:** {confidence}%")
         else:
             response = AIMessage(content="The uploaded image is not clear enough to make a diagnosis / the image is not a medical image.")
-
-        # response = AIMessage(content="This would be handled by the skin lesion agent, analyzing the skin image.")
 
         return {
             **state,

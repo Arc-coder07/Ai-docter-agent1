@@ -2,8 +2,9 @@
 import { useApiClient } from "@/lib/api"
 import { useParams, useRouter } from 'next/navigation'
 import React, { useState, useEffect, useRef } from 'react'
-import { ArrowLeft, Circle, PhoneCall, StopCircle } from 'lucide-react'
+import { ArrowLeft, Circle, PhoneCall, StopCircle, Clock, Mic, CalendarCheck, ChevronRight } from 'lucide-react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Doctor } from '../../_components/DoctorsList'
 import ConversationDisplay from '../components/ConversationDisplay'
@@ -43,161 +44,73 @@ function MedicalVoiceAgent() {
 
   // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null)
-  // NEW: Ref to track messages inside event listeners without re-rendering
   const messagesRef = useRef<Message[]>([])
 
-  // Sync the Ref with the State whenever messages change
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages])
 
-  // --- 2. NEW: Save Conversation Logic ---
   const saveConversation = async () => {
-    // Use the Ref to get the absolute latest messages at the moment the call ends
     const currentMessages = messagesRef.current;
-
-    if (currentMessages.length === 0) {
-      console.log("No messages to save.");
-      return;
-    }
-
-    console.log("Saving conversation to database...");
+    if (currentMessages.length === 0) return;
     try {
       await apiClient(`/history/sessions/${sessionId}`, {
         method: "PUT",
         data: { messages: currentMessages }
       });
-      console.log("Conversation saved successfully!");
     } catch (error) {
       console.error("Failed to save conversation:", error);
     }
   }
 
-  // --- Main Effect for Vapi Listeners ---
-
   useEffect(() => {
     if (sessionId) getSessionDetails();
 
-    // 1. CLEANUP: Remove any existing listeners to prevent duplicates (Fixes Double Text)
     vapi.removeAllListeners();
 
-    // Event: Call Started
     vapi.on('call-start', () => {
-      console.log('Call started');
       setIsCallActive(true);
       setIsLoading(false);
     });
 
-    // Event: Call Ended
     vapi.on('call-end', () => {
-      console.log('Call ended');
       stopCallUI();
       saveConversation();
     });
 
-    // Event: Speech/Audio Status
     vapi.on('speech-start', () => setIsSpeaking(true));
     vapi.on('speech-end', () => setIsSpeaking(false));
 
-    // Event: Transcripts & Messages
     vapi.on('message', (message: any) => {
       if (message.type === 'transcript') {
         if (message.role !== 'user' && message.role !== 'assistant') return;
 
-        // Handle Real-time Captions (Partial)
         if (message.transcriptType === 'partial') {
           if (message.role === 'assistant') setAssistantCaption(message.transcript);
           if (message.role === 'user') setUserCaption(message.transcript);
-        }
-        // Handle Final Messages
-        else {
-          // 2. DEDUPLICATION: Check if this message is identical to the last one
+        } else {
           setMessages(prev => {
             const lastMsg = prev[prev.length - 1];
-            // If content matches and was received < 1 second ago, ignore it
             if (lastMsg && lastMsg.content === message.transcript && (Date.now() - (lastMsg.timestamp || 0) < 1000)) {
               return prev;
             }
-
-            const newMessage: Message = {
+            return [...prev, {
               role: message.role,
               content: message.transcript,
               timestamp: Date.now()
-            };
-            return [...prev, newMessage];
+            }];
           });
-
-          // Clear captions immediately
           if (message.role === 'assistant') setAssistantCaption("");
           if (message.role === 'user') setUserCaption("");
         }
       }
     });
 
-    // Cleanup on unmount
     return () => {
-      // NOTE: We do NOT call vapi.stop() here to prevent dropping call on hot-reload
       vapi.removeAllListeners();
     }
   }, [sessionId])
-  // useEffect(() => {
-  //   if (sessionId) getSessionDetails();
 
-  //   // Event: Call Started
-  //   vapi.on('call-start', () => {
-  //     console.log('Call started');
-  //     setIsCallActive(true);
-  //     setIsLoading(false);
-  //   });
-
-  //   // Event: Call Ended
-  //   vapi.on('call-end', () => {
-  //     console.log('Call ended');
-  //     stopCallUI();
-  //     saveConversation(); // <--- Trigger Save Function Here
-  //   });
-
-  //   // Event: Speech/Audio Status
-  //   vapi.on('speech-start', () => setIsSpeaking(true));
-  //   vapi.on('speech-end', () => setIsSpeaking(false));
-
-  //   // Event: Transcripts & Messages
-  //   vapi.on('message', (message: any) => {
-  //     if (message.type === 'transcript') {
-  //       // Filter out system messages, only keep user/assistant
-  //       if (message.role !== 'user' && message.role !== 'assistant') return;
-
-  //       // Handle Real-time Captions (Partial)
-  //       if (message.transcriptType === 'partial') {
-  //         if (message.role === 'assistant') setAssistantCaption(message.transcript);
-  //         if (message.role === 'user') setUserCaption(message.transcript);
-  //       } 
-  //       // Handle Final Messages
-  //       else {
-  //          const newMessage: Message = {
-  //            role: message.role,
-  //            content: message.transcript,
-  //            timestamp: Date.now()
-  //          };
-
-  //          // Clear captions
-  //          if (message.role === 'assistant') setAssistantCaption("");
-  //          if (message.role === 'user') setUserCaption("");
-
-  //          // Update State
-  //          setMessages(prev => [...prev, newMessage]);
-  //       }
-  //     }
-  //   });
-
-  //   // Cleanup on unmount
-  //   return () => {
-  //     vapi.stop();
-  //     vapi.removeAllListeners();
-  //   }
-  // }, [sessionId]) // Dependency array kept clean thanks to Ref pattern
-
-  // Timer Logic
   useEffect(() => {
     if (isCallActive) {
       timerRef.current = setInterval(() => setCallDuration(p => p + 1), 1000)
@@ -209,25 +122,8 @@ function MedicalVoiceAgent() {
 
   const getSessionDetails = async () => {
     try {
-      // 1. Get messages
       const msgsResponse = await apiClient(`/history/sessions/${sessionId}`)
-      const messagesData = msgsResponse.data;
-
-      // 2. We don't really have "session details" endpoint separately except the list. 
-      // But we can construct the session object if needed or just use messages.
-      // The frontend expects `session.selectedDocter`.
-      // The new backend doesn't store "selectedDocter" in a JSON blob yet... 
-      // Oops, I removed the JSON blob logic.
-      // Checking the DB migration, I did remove `selectedDocter` column.
-
-      // CRITICAL FIX: The UI needs the Doctor info to display the image.
-      // I should store `selectedDocter` metadata in `ChatSession` table or just rely on hardcoded for now?
-      // Or restore the metadata usage. 
-      // For now, let's mock it to prevent crash if backend doesn't return it.
-
-      setMessages(messagesData);
-
-      // Mock session for UI to not break
+      setMessages(msgsResponse.data);
       setSession({
         id: sessionId as any,
         selectedDoctor: {
@@ -239,12 +135,6 @@ function MedicalVoiceAgent() {
           voiceId: ""
         }
       })
-
-      // If we saved the doctor info in the Session Title or a separate field, we could recover it.
-      // Migration plan said "features maintained".
-      // I can add a `metadata` or `doctor_info` column to ChatSession if needed.
-      // For now, let's proceed with defaults.
-
     } catch (error) {
       console.error("Error fetching session:", error)
     }
@@ -261,7 +151,7 @@ function MedicalVoiceAgent() {
   }
 
   const stopCall = () => {
-    vapi.stop(); // This triggers 'call-end' event which runs saveConversation
+    vapi.stop();
   }
 
   const stopCallUI = () => {
@@ -280,46 +170,67 @@ function MedicalVoiceAgent() {
   }
 
   return (
-    <div className='p-5 border-2 rounded-xl bg-secondary'>
-      <div className='flex items-center justify-between'>
-        <div className='flex items-center gap-3'>
+    <div className='min-h-[calc(100vh-120px)] flex flex-col'>
+      {/* Top Navigation Bar */}
+      <div className='flex items-center justify-between mb-8'>
+        <div className='flex items-center gap-4'>
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => router.push('/dashboard')}
-            className="hover:bg-gray-100"
+            onClick={() => router.push('/dashboard/consultation')}
+            className="rounded-full hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </Button>
-          <h2 className='p-1 px-2 border rounded-md flex items-center gap-2'>
-            {isCallActive ? (
-              <><Circle className="text-green-500 animate-pulse fill-green-500" /> Connected</>
-            ) : (
-              <><Circle /> Not Connected</>
-            )}
-          </h2>
+          <div>
+            <h1 className='text-lg font-semibold tracking-tight text-gray-900 dark:text-white'>Voice Session</h1>
+            <p className='text-xs font-medium text-gray-500 dark:text-gray-400'>
+              {session?.selectedDoctor?.specialist || 'AI Specialist'}
+            </p>
+          </div>
         </div>
-        <h2 className='text-xl font-bold text-gray-500'>{formatTime(callDuration)}</h2>
+
+        <div className='flex items-center gap-3'>
+          {/* Status Badge */}
+          <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[11px] font-semibold tracking-widest uppercase border transition-colors ${isCallActive
+            ? 'bg-blue-50/50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-500/20'
+            : 'bg-white dark:bg-[#111111] text-gray-500 border-gray-200 dark:border-white/10'
+            }`}>
+            <div className={`w-2 h-2 rounded-full ${isCallActive ? 'bg-blue-500 animate-pulse' : 'bg-gray-300 dark:bg-gray-600'
+              }`} />
+            {isCallActive ? 'Live Call' : 'Standby'}
+          </div>
+
+          {/* Timer */}
+          {isCallActive && (
+            <div className='flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white dark:bg-[#111111] border border-gray-200 dark:border-white/10 shadow-[0_2px_8px_rgba(0,0,0,0.02)]'>
+              <Clock className="w-3.5 h-3.5 text-gray-400" />
+              <span className='text-xs font-mono font-medium text-gray-700 dark:text-gray-300 tracking-wider'>{formatTime(callDuration)}</span>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className='flex flex-col items-center gap-2 mt-10 justify-center'>
-        {session?.selectedDoctor?.image ? (
-          <Image
-            src={session.selectedDoctor.image}
-            alt="Doctor"
-            width={120}
-            height={120}
-            className={`w-[100px] h-[100px] object-cover rounded-full transition-all duration-300 ${isSpeaking ? 'ring-4 ring-green-500 scale-105' : ''}`}
-          />
-        ) : (
-          <div className='w-[100px] h-[100px] bg-gray-200 rounded-full flex items-center justify-center'>
-            <span className='text-gray-400'>No Image</span>
+      {/* Main Content */}
+      <div className='flex flex-col items-center'>
+        {/* Doctor Info (subtle) */}
+        {session?.selectedDoctor && (
+          <div className='flex items-center gap-3 mb-2'>
+            <Image
+              src={session.selectedDoctor.image}
+              alt="Doctor"
+              width={40}
+              height={40}
+              className="w-10 h-10 object-cover rounded-full border-2 border-white shadow-md"
+            />
+            <div>
+              <h2 className='text-sm font-semibold text-gray-800'>{session.selectedDoctor.specialist}</h2>
+              <p className='text-xs text-gray-400'>{session.selectedDoctor.description}</p>
+            </div>
           </div>
         )}
 
-        <h2 className='text-lg font-bold mt-2'>{session?.selectedDoctor?.specialist || "AI Doctor"}</h2>
-        <p className='text-sm text-gray-500'>Analysis agent</p>
-
+        {/* Orb + Conversation Display */}
         <ConversationDisplay
           messages={messages}
           userCaption={userCaption}
@@ -329,14 +240,56 @@ function MedicalVoiceAgent() {
           isSpeaking={isSpeaking}
         />
 
-        {!isCallActive ? (
-          <Button className='mt-6' onClick={startCall} disabled={isLoading}>
-            {isLoading ? "Connecting..." : <><PhoneCall className='w-4 h-4 mr-2' /> Start</>}
-          </Button>
-        ) : (
-          <Button className='mt-6 bg-red-500 hover:bg-red-600' onClick={stopCall}>
-            <StopCircle className='w-4 h-4 mr-2' /> End Session
-          </Button>
+        {/* Action Button */}
+        <div className='mt-10 mb-8'>
+          {!isCallActive ? (
+            <button
+              onClick={startCall}
+              disabled={isLoading}
+              className='group flex items-center justify-center gap-2.5 w-64 h-14 rounded-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-semibold text-sm shadow-[0_8px_24px_rgba(0,0,0,0.12)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.2)] hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:hover:translate-y-0'
+            >
+              {isLoading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 dark:border-gray-900/30 border-t-white dark:border-t-gray-900 rounded-full animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <Mic className='w-5 h-5' />
+                  Start Consultation
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={stopCall}
+              className='group flex items-center justify-center gap-2.5 w-64 h-14 rounded-full bg-rose-500 text-white font-semibold text-sm shadow-[0_8px_24px_rgba(244,63,94,0.25)] hover:bg-rose-600 hover:shadow-[0_12px_32px_rgba(244,63,94,0.35)] hover:-translate-y-0.5 transition-all duration-300'
+            >
+              <StopCircle className='w-5 h-5 group-hover:scale-110 transition-transform' />
+              End Session
+            </button>
+          )}
+        </div>
+
+        {/* AI → Doctor Handoff CTA */}
+        {!isCallActive && messages.length > 0 && (
+          <Link
+            href="/dashboard/consultation_booking"
+            className="group w-full max-w-lg mx-auto flex items-center gap-4 p-5 rounded-2xl bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-500/10 dark:to-emerald-500/10 border border-teal-100 dark:border-teal-500/15 hover:shadow-lg hover:shadow-teal-100/50 dark:hover:shadow-teal-900/30 transition-all duration-300 cursor-pointer mb-4"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shadow-md flex-shrink-0 group-hover:scale-105 transition-transform">
+              <CalendarCheck className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-sm font-semibold text-gray-800 dark:text-white group-hover:text-teal-700 dark:group-hover:text-teal-300 transition-colors">
+                Want to consult a real doctor?
+              </h4>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Book a video appointment with a healthcare specialist
+              </p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-teal-600 group-hover:translate-x-1 transition-all flex-shrink-0" />
+          </Link>
         )}
       </div>
     </div>

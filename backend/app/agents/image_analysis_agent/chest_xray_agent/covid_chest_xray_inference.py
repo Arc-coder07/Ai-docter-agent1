@@ -45,7 +45,9 @@ class ChestXRayClassification:
     def _load_model_weights(self, model_path):
         """Load pre-trained model weights."""
         try:
-            self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+            # Setting weights_only=True to avoid future warnings
+            self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
+                
             # print(f"Model loaded successfully from {model_path}")
             self.logger.info(f"Model loaded successfully from {model_path}")
         except Exception as e:
@@ -54,7 +56,7 @@ class ChestXRayClassification:
             raise e
     
     def predict(self, img_path):
-        """Predict the class of a given image."""
+        """Predict the class of a given image and return confidence."""
         try:
             image = Image.open(img_path).convert("RGB")
             image_tensor = self.transform(image).unsqueeze(0)
@@ -62,18 +64,26 @@ class ChestXRayClassification:
             
             with torch.no_grad():
                 out = self.model(input_tensor)
-                _, preds = torch.max(out, 1)
-                idx = preds.cpu().numpy()[0]
-                pred_class = self.class_names[idx]
                 
-            # # Display Image
-            # plt.imshow(np.array(image))
-            # plt.title(f"Predicted: {pred_class}")
-            # plt.show()
+                # Calculate softmax probabilities
+                probabilities = torch.nn.functional.softmax(out, dim=1)[0]
+                
+                # Get max prediction and confidence
+                confidence_score, preds = torch.max(probabilities, 0)
+                idx = preds.item()
+                pred_class = self.class_names[idx]
+                confidence_pct = round(confidence_score.item() * 100, 1)
 
-            self.logger.info(f"Predicted Class: {pred_class}")
+            self.logger.info(f"Predicted Class: {pred_class} ({confidence_pct}%)")
             
-            return pred_class
+            return {
+                "class": pred_class,
+                "confidence": confidence_pct,
+                "probabilities": {
+                    self.class_names[i]: round(probabilities[i].item() * 100, 1) 
+                    for i in range(len(self.class_names))
+                }
+            }
         except Exception as e:
             self.logger.error(f"Error during prediction Covid Chest X-ray: {str(e)}")
             return None

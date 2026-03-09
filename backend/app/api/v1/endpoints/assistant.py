@@ -3,6 +3,8 @@ Multi-Agent Medical Assistant API Endpoints
 """
 import os
 import uuid
+import logging
+import traceback
 from typing import Dict, Optional, List
 from datetime import datetime
 
@@ -16,6 +18,8 @@ from app.db.engine import get_session
 from app.models import User, ChatSession, ChatMessage, MedicalReport
 from sqlmodel import Session, select
 import json
+
+logger = logging.getLogger(__name__)
 
 # Import the agent decision system
 from app.agents.agent_decision import process_query
@@ -129,7 +133,8 @@ async def assistant_chat(
         }
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Assistant chat error: {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Chat processing error: {str(e)}")
 
 
 @router.post("/upload")
@@ -231,15 +236,30 @@ async def upload_and_analyze(
         if "SKIN_LESION_AGENT" in agent_name:
             segmentation_path = os.path.join(SKIN_LESION_OUTPUT, "segmentation_plot.png")
             if os.path.exists(segmentation_path):
-                result["result_image"] = "/uploads/skin_lesion_output/segmentation_plot.png"
+                import shutil
+                # Create unique filename to prevent overwriting
+                unique_img_name = f"seg_{session.id}_{uuid.uuid4().hex[:8]}.png"
+                unique_img_path = os.path.join(SKIN_LESION_OUTPUT, unique_img_name)
+                shutil.copy(segmentation_path, unique_img_path)
+                result["result_image"] = f"/uploads/skin_lesion_output/{unique_img_name}"
         
-        # Save assistant response
+        # Save main assistant response
         assistant_message = ChatMessage(
             session_id=session.id,
             role="assistant",
             content=response_text
         )
         db.add(assistant_message)
+        
+        # Save the result image as a separate message for UI persistence
+        if result.get("result_image"):
+            image_message = ChatMessage(
+                session_id=session.id,
+                role="assistant",
+                content="Analysis Result:",
+                image_url=result["result_image"]
+            )
+            db.add(image_message)
         
         # Create medical report record
         report = MedicalReport(
@@ -262,13 +282,14 @@ async def upload_and_analyze(
         
     except Exception as e:
         db.rollback()
+        logger.error(f"Assistant upload error: {str(e)}\n{traceback.format_exc()}")
         # Clean up uploaded file on error
         if os.path.exists(file_path):
             try:
                 os.remove(file_path)
             except:
                 pass
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Image analysis error: {str(e)}")
 
 
 @router.post("/validate")

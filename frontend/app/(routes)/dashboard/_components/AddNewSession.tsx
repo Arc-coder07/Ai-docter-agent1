@@ -24,9 +24,10 @@ interface AddNewSessionProps {
   isOpen?: boolean
   onOpenChange?: (open: boolean) => void
   preSelectedDoctor?: Doctor | null
+  hideTrigger?: boolean
 }
 
-function AddNewSession({ isOpen, onOpenChange, preSelectedDoctor }: AddNewSessionProps) {
+function AddNewSession({ isOpen, onOpenChange, preSelectedDoctor, hideTrigger }: AddNewSessionProps) {
   const [note, setNote] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [suggestedDocter, setSuggestedDocter] = useState<Doctor | undefined>(preSelectedDoctor || undefined);
@@ -86,7 +87,7 @@ function AddNewSession({ isOpen, onOpenChange, preSelectedDoctor }: AddNewSessio
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        {!isOpen && (
+        {!isOpen && !hideTrigger && (
           <Button variant="outline" className='bg-black text-white mt-3 hover:bg-gray-800'>
             + Start a Consultation
           </Button>

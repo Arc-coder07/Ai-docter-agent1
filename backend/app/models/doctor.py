@@ -20,9 +20,35 @@ class Doctor(SQLModel, table=True):
     bio: Optional[str] = None
     consultation_fee: float = Field(default=0.0)
     is_available: bool = Field(default=True)
+    # Links a Clerk-authenticated user to this doctor profile.
+    clerk_user_id: Optional[str] = Field(default=None, unique=True, index=True)
+    # Option 3 fields
+    phone: Optional[str] = None
+    languages: Optional[str] = Field(default="English")  # Comma-separated
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     appointments: List["Appointment"] = Relationship(back_populates="doctor")
+    availability_slots: List["DoctorAvailability"] = Relationship(back_populates="doctor")
+
+
+class DoctorAvailability(SQLModel, table=True):
+    """Weekly recurring availability slots for doctors.
+
+    Each row represents a time block on a specific day of the week.
+    E.g. Monday 09:00-12:00 (slot_duration_minutes=30 → generates 6 slots).
+    """
+    __tablename__ = "doctor_availability"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    doctor_id: uuid.UUID = Field(foreign_key="doctors.id", index=True)
+    day_of_week: int  # 0=Monday, 1=Tuesday, ..., 6=Sunday
+    start_time: str   # "09:00" (HH:MM 24h format)
+    end_time: str     # "17:00"
+    slot_duration_minutes: int = Field(default=30)
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    doctor: Doctor = Relationship(back_populates="availability_slots")
 
 
 class Appointment(SQLModel, table=True):

@@ -52,6 +52,7 @@ function DoctorsList() {
         isOpen={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         preSelectedDoctor={selectedDoctor}
+        hideTrigger={true}
       />
     </div>
   )

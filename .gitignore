@@ -146,6 +146,8 @@ backend/app/agents/xray_detection/model_cache/
 
 # Uploads
 backend/uploads/
+backend/app/uploads/
+backend/app/api/uploads/
 
 # External projects
 Multi-Agent-Medical-Assistant1/
@@ -155,3 +157,30 @@ health-report/
 *.pth
 *.pth.tar
 *.h5
+*.onnx
+
+# Python virtual environment
+backend/venv/
+venv/
+
+# RAG vector database (regenerated at runtime)
+backend/app/data/docs_db/
+
+# Skin lesion model directory
+backend/app/agents/image_analysis_agent/skin_lesion_agent/models/
+
+# Chest X-ray models
+backend/app/agents/image_analysis_agent/chest_xray_agent/models/
+
+# Temp screenshots in project root
+doctor_listing_v3.png
+slot_booking_modal.png
+doctor_portal_register_cta.png
+
+# Test files and scripts
+Test Files/
+scripts-rm/
+
+# Gemini/Agent workspace
+.gemini/
+.agents/

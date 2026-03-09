@@ -6,11 +6,17 @@ import os
 
 app = FastAPI(title="AI Doctor Agent API")
 
-# Configure CORS
-origins = [
+# Configure CORS - accept all common dev ports + custom origins from env
+_default_origins = [
     "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "http://127.0.0.1:3002",
 ]
+_extra = os.environ.get("CORS_ORIGINS", "")
+origins = _default_origins + [o.strip() for o in _extra.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,86 +1,59 @@
 "use client";
 
 import { motion } from "framer-motion";
-
-import { Icons } from "@/components/icons";
-import HeroVideoDialog from "@/components/magicui/hero-video";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
-
+import { ArrowRight, Sparkles } from "lucide-react";
 
 function HeroPill() {
   return (
     <motion.div
-      className="flex w-auto items-center space-x-2 rounded-full bg-accent/10 px-3 py-1.5 ring-1 ring-accent/20 whitespace-pre"
-      initial={{ opacity: 0, y: -20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+      className="flex w-auto items-center space-x-2 rounded-full bg-white/5 px-4 py-1.5 ring-1 ring-black/5 dark:ring-white/10 backdrop-blur-md shadow-[0_2px_8px_rgba(0,0,0,0.04)] mb-8"
+      initial={{ opacity: 0, y: -20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div className="w-fit rounded-full bg-accent px-3 py-1 text-center text-xs font-medium text-accent-foreground sm:text-sm">
-        📣 Announcement
+      <div className="flex items-center justify-center gap-1.5">
+        <Sparkles className="h-3.5 w-3.5 text-primary" />
+        <span className="text-sm font-medium tracking-tight bg-gradient-to-r from-gray-900 to-gray-600 dark:from-gray-100 dark:to-gray-400 bg-clip-text text-transparent">
+          Introducing MedSage AI
+        </span>
       </div>
-      <p className="text-xs font-medium text-black sm:text-sm ">
-        Introducing MedSage – Your AI Medical Assistant!
-      </p>
-      <svg
-        width="12"
-        height="12"
-        className="ml-1"
-        viewBox="0 0 12 12"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          d="M8.78141 5.33312L5.20541 1.75712L6.14808 0.814453L11.3334 5.99979L6.14808 11.1851L5.20541 10.2425L8.78141 6.66645H0.666748V5.33312H8.78141Z"
-          fill="hsl(var(--accent))"
-        />
-      </svg>
     </motion.div>
   );
 }
 
 function HeroTitles() {
   return (
-    <div className="flex w-full max-w-4xl flex-col space-y-6 overflow-hidden pt-12">
+    <div className="flex w-full max-w-[800px] flex-col space-y-6 items-center text-center">
       <motion.h1
-        className="text-center text-5xl font-medium leading-tight text-foreground sm:text-6xl md:text-7xl lg:text-8xl"
-        initial={{ filter: "blur(10px)", opacity: 0, y: 50 }}
-        animate={{ filter: "blur(0px)", opacity: 1, y: 0 }}
+        className="text-5xl font-semibold tracking-tighter sm:text-6xl md:text-7xl lg:text-8xl text-gray-950 dark:text-gray-50 leading-[1.1]"
+        initial={{ opacity: 0, y: 30, filter: "blur(8px)" }}
+        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
         transition={{
-          duration: 1,
+          duration: 1.2,
           ease: [0.16, 1, 0.3, 1],
-          staggerChildren: 0.2,
         }}
       >
-        {["MedSage","- Your", "AI", "Medical", "Assistant"].map((text, index) => (
-          <motion.span
-            key={index}
-            className="inline-block px-1 md:px-2 text-balance font-semibold"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              duration: 0.8,
-              delay: index * 0.2,
-              ease: [0.16, 1, 0.3, 1],
-            }}
-          >
-            {text}
-          </motion.span>
-        ))}
+        Your intelligence. <br className="hidden sm:block" />
+        <span className="bg-gradient-to-r from-gray-900 via-gray-700 to-gray-500 dark:from-white dark:via-gray-200 dark:to-gray-400 bg-clip-text text-transparent">
+          Amplified.
+        </span>
       </motion.h1>
+
       <motion.p
-        className="mx-auto max-w-3xl text-center text-xl leading-8 text-muted-foreground sm:text-2xl sm:leading-10 text-balance"
+        className="max-w-[600px] text-lg sm:text-xl font-medium tracking-tight text-gray-500 dark:text-gray-400 leading-relaxed text-balance"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{
-          delay: 0.6,
-          duration: 0.8,
+          delay: 0.4,
+          duration: 1,
           ease: [0.16, 1, 0.3, 1],
         }}
       >
-        {/* Experience real-time voice conversations with an AI medical assistant. */}
+        Experience a breakthrough in medical assistance. Powerful agents designed to seamlessly integrate with your workflow, making every diagnosis clearer and faster.
       </motion.p>
     </div>
   );
@@ -90,65 +63,46 @@ function HeroCTA() {
   const { user } = useUser();
 
   return (
-    <>
-      <motion.div
-        className="mx-auto mt-10 flex w-full max-w-2xl flex-col items-center justify-center space-y-4 sm:flex-row sm:space-x-4 sm:space-y-0"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.8, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+    <motion.div
+      className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 w-full"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.6, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <Link
+        href={user ? "/dashboard" : "/sign-up"}
+        className={cn(
+          buttonVariants({ size: "lg" }),
+          "h-14 px-8 rounded-full text-base font-medium shadow-[0_4px_14px_0_rgba(0,0,0,0.1)] hover:shadow-[0_6px_20px_0_rgba(0,0,0,0.15)] transition-all duration-300 gap-2 bg-gray-900 text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+        )}
       >
-        <Link
-          href={user ? "/dashboard" : "/signin"}
-          className={cn(
-            buttonVariants({ variant: "default" }),
-            "w-full sm:w-auto text-background flex gap-2 px-8 py-6 text-lg font-medium"
-          )}
-        >
-          
-          {user ? "Dashboard" : "Start a consultation"}
-        </Link>
-      </motion.div>
-      <motion.p
-        className="mt-6 text-sm text-muted-foreground"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.0, duration: 0.8 }}
+        {user ? "Go to Dashboard" : "Start your trial"}
+        <ArrowRight className="w-4 h-4" />
+      </Link>
+
+      <Link
+        href="/about"
+        className={cn(
+          buttonVariants({ variant: "ghost", size: "lg" }),
+          "h-14 px-8 rounded-full text-base font-medium tracking-tight hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+        )}
       >
-        
-      </motion.p>
-    </>
+        Learn more
+      </Link>
+    </motion.div>
   );
 }
 
-/* function HeroImage() {
-  return (
-    <motion.div
-      className="relative mx-auto flex w-full items-center justify-center"
-      initial={{ opacity: 0, y: 50 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 1.2, duration: 1, ease: [0.16, 1, 0.3, 1] }}
-    >
-      <HeroVideoDialog
-        animationStyle="from-center"
-        videoSrc="https://imagekit.io/player/embed/rmyd10ywi/Recording%202025-06-29%20204016.mp4?updatedAt=1751212929355&thumbnail=https%3A%2F%2Fik.imagekit.io%2Frmyd10ywi%2FRecording%25202025-06-29%2520204016.mp4%2Fik-thumbnail.jpg%3FupdatedAt%3D1751212929355&updatedAt=1751212929355"
-        // allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-        thumbnailSrc="/dashboard.png"
-        thumbnailAlt="Hero Video"
-        className="border rounded-lg shadow-lg max-w-screen-lg mt-16"
-      />
-    </motion.div>
-  );
-} */
-
 export default function Hero2() {
   return (
-    <section id="hero" className="min-h-screen">
-      <div className="relative flex w-full flex-col items-center justify-start px-4 pt-40 pb-24 sm:px-6 sm:pt-32 md:pt-48 lg:px-8 lg:pt-56">
+    <section className="relative min-h-[90vh] flex flex-col items-center justify-center overflow-hidden bg-white dark:bg-[#0a0a0a]">
+      {/* Subtle background gradient / glow */}
+      <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-gray-100 via-white to-white dark:from-[#1a1a1a] dark:via-[#0a0a0a] dark:to-[#0a0a0a] opacity-60" />
+
+      <div className="relative z-10 flex w-full flex-col items-center justify-center px-4 md:px-6 py-20">
         <HeroPill />
         <HeroTitles />
         <HeroCTA />
-        {/* <HeroImage /> */}
-        <div className="pointer-events-none absolute inset-x-0 -bottom-12 h-1/3 bg-gradient-to-t from-background via-background to-transparent lg:h-1/4"></div>
       </div>
     </section>
   );

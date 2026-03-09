@@ -17,87 +17,171 @@ router = APIRouter()
 # Configure Gemini with new SDK
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
+def _local_symptom_analysis(notes: str) -> str:
+    """
+    Intelligent local fallback for symptom-to-specialist matching.
+    Uses weighted scoring so condition-specific terms beat ambiguous body parts.
+    E.g., "blackheads on nose" → Dermatologist (blackhead=3pts) beats ENT (nose=1pt).
+    """
+    text = notes.lower()
+
+    # (keyword, weight) — higher weight = more specific to that specialty
+    specialist_rules: list[tuple[str, list[tuple[str, int]]]] = [
+        ("Dermatologist", [
+            ("blackhead", 3), ("whitehead", 3), ("acne", 3), ("pimple", 3),
+            ("eczema", 3), ("psoriasis", 3), ("hives", 3), ("rash", 3),
+            ("derma", 3), ("itching", 2), ("skin", 2), ("mole", 2),
+            ("blister", 2), ("sunburn", 2), ("fungal", 2), ("ringworm", 3),
+            ("dandruff", 2), ("dry skin", 2), ("oily skin", 2),
+        ]),
+        ("Cardiologist", [
+            ("chest pain", 3), ("heart attack", 3), ("cardiac", 3),
+            ("palpitation", 3), ("arrhythmia", 3), ("cardiovascular", 3),
+            ("blood pressure", 2), ("cholesterol", 2), ("heart", 2),
+            ("angina", 3), ("shortness of breath", 2), ("bp", 1),
+        ]),
+        ("Pediatrician", [
+            ("child", 2), ("baby", 3), ("infant", 3), ("toddler", 3),
+            ("pediatric", 3), ("kid", 2), ("newborn", 3), ("my son", 2),
+            ("my daughter", 2), ("vaccination", 2),
+        ]),
+        ("Psychologist", [
+            ("anxiety", 3), ("depression", 3), ("panic attack", 3),
+            ("mental health", 3), ("stress", 2), ("insomnia", 2),
+            ("suicidal", 3), ("self harm", 3), ("therapy", 2),
+            ("mood", 2), ("emotional", 1), ("sad", 1), ("lonely", 2),
+        ]),
+        ("Orthopedic", [
+            ("fracture", 3), ("sprain", 3), ("arthritis", 3),
+            ("back pain", 3), ("spine", 3), ("orthopedic", 3),
+            ("bone", 2), ("joint", 2), ("knee pain", 3), ("shoulder pain", 3),
+            ("muscle pain", 2), ("ligament", 3),
+        ]),
+        ("ENT Specialist", [
+            ("ear infection", 3), ("tonsil", 3), ("sinus", 3),
+            ("hearing loss", 3), ("snoring", 3), ("sore throat", 3),
+            ("throat pain", 3), ("ear pain", 3), ("nasal congestion", 3),
+            ("cold", 1), ("cough", 1), ("ear", 1), ("nose", 1), ("throat", 1),
+        ]),
+        ("Gynecologist", [
+            ("period", 2), ("menstrual", 3), ("pregnancy", 3), ("pregnant", 3),
+            ("pcos", 3), ("ovary", 3), ("uterus", 3), ("menopause", 3),
+            ("gynec", 3), ("hormonal", 2), ("vaginal", 3), ("breast", 2),
+        ]),
+        ("Nutritionist", [
+            ("diet", 2), ("nutrition", 3), ("obesity", 3), ("weight loss", 3),
+            ("weight gain", 3), ("calorie", 2), ("vitamin deficiency", 3),
+            ("protein", 1), ("meal plan", 3), ("eating disorder", 3),
+        ]),
+        ("Dentist", [
+            ("tooth", 3), ("teeth", 3), ("dental", 3), ("cavity", 3),
+            ("toothache", 3), ("gum", 2), ("braces", 3), ("wisdom tooth", 3),
+            ("oral", 2), ("mouth ulcer", 3), ("bad breath", 2),
+        ]),
+    ]
+
+    # Score each specialist
+    scores: dict[str, int] = {}
+    for specialist, keywords in specialist_rules:
+        score = 0
+        for keyword, weight in keywords:
+            if keyword in text:
+                score += weight
+        if score > 0:
+            scores[specialist] = score
+
+    if not scores:
+        return "General Physician"
+
+    # Return the specialist with highest score
+    return max(scores, key=scores.get)  # type: ignore
+
+
 @router.post("/suggest-doctors")
 async def suggest_doctors(request: SuggestDoctorRequest):
     """
     Suggests a specialist doctor based on user symptoms.
-    Uses keyword matching based on the original AIDoctorAgents list.
+    Uses Gemini AI for intelligent, context-aware symptom analysis.
     """
-    symptoms = request.notes.lower()
-    
-    # Comprehensive symptom-to-specialist mapping based on original list
-    specialist_mappings = [
-        {
-            "keywords": ["child", "baby", "infant", "kid", "toddler", "pediatric", "fever child", "vaccination"],
-            "specialist": "Pediatrician",
-            "description": "Expert in children's health, from babies to teens.",
-            "image": "/doctor2.png"
-        },
-        {
-            "keywords": ["skin", "rash", "acne", "eczema", "itching", "derma", "pimple", "allergy skin", "psoriasis", "hives"],
-            "specialist": "Dermatologist",
-            "description": "Handles skin issues like rashes, acne, or infections.",
-            "image": "/doctor3.png"
-        },
-        {
-            "keywords": ["stress", "anxiety", "depression", "mental", "sleep", "insomnia", "panic", "mood", "sad", "emotional", "therapy", "psychology"],
-            "specialist": "Psychologist",
-            "description": "Supports mental health and emotional well-being.",
-            "image": "/doctor4.png"
-        },
-        {
-            "keywords": ["diet", "weight", "nutrition", "obesity", "eating", "calorie", "fat", "vitamin", "protein", "meal plan"],
-            "specialist": "Nutritionist",
-            "description": "Provides advice on healthy eating and weight management.",
-            "image": "/doctor5.png"
-        },
-        {
-            "keywords": ["heart", "chest pain", "blood pressure", "bp", "cardiac", "palpitation", "cholesterol", "artery", "cardiovascular"],
-            "specialist": "Cardiologist",
-            "description": "Focuses on heart health and blood pressure issues.",
-            "image": "/doctor6.png"
-        },
-        {
-            "keywords": ["ear", "nose", "throat", "sinus", "cold", "cough", "hearing", "tonsil", "snoring", "voice", "ent"],
-            "specialist": "ENT Specialist",
-            "description": "Handles ear, nose, and throat-related problems.",
-            "image": "/doctor7.png"
-        },
-        {
-            "keywords": ["bone", "joint", "muscle", "back pain", "spine", "fracture", "arthritis", "knee", "shoulder", "orthopedic", "sprain"],
-            "specialist": "Orthopedic",
-            "description": "Helps with bone, joint, and muscle pain.",
-            "image": "/doctor8.png"
-        },
-        {
-            "keywords": ["period", "menstrual", "pregnancy", "pregnant", "gynec", "uterus", "ovary", "hormonal", "pcos", "menopause", "women health"],
-            "specialist": "Gynecologist",
-            "description": "Cares for women's reproductive and hormonal health.",
-            "image": "/doctor9.png"
-        },
-        {
-            "keywords": ["tooth", "teeth", "dental", "gum", "cavity", "mouth", "oral", "toothache", "wisdom tooth", "braces"],
-            "specialist": "Dentist",
-            "description": "Handles oral hygiene and dental problems.",
-            "image": "/doctor10.png"
-        }
+    # The exact specialist names that exist in the frontend AIDoctorAgents list
+    valid_specialists = [
+        "General Physician",
+        "Pediatrician",
+        "Dermatologist",
+        "Psychologist",
+        "Nutritionist",
+        "Cardiologist",
+        "ENT Specialist",
+        "Orthopedic",
+        "Gynecologist",
+        "Dentist",
     ]
-    
-    # Check each specialist's keywords against symptoms
-    for mapping in specialist_mappings:
-        for keyword in mapping["keywords"]:
-            if keyword in symptoms:
-                return {
-                    "specialist": mapping["specialist"],
-                    "description": mapping["description"],
-                    "image": mapping["image"]
-                }
-    
-    # Default to General Physician if no specific match
+
+    prompt = f"""You are a medical triage assistant. Based on the patient's symptoms below, 
+determine which specialist doctor they should consult.
+
+Patient's symptoms: "{request.notes}"
+
+You MUST respond with EXACTLY ONE of these specialist names (no other text):
+{chr(10).join(f'- {s}' for s in valid_specialists)}
+
+Rules:
+- Consider the MEDICAL CONTEXT, not just individual words.
+- "blackheads on nose" is a SKIN issue → Dermatologist (not ENT just because "nose" appears).
+- "chest pain" → Cardiologist
+- "child with fever" → Pediatrician
+- If symptoms don't clearly match a specialist, choose "General Physician".
+- Respond with ONLY the specialist name, nothing else."""
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+        )
+        suggested = response.text.strip().strip('"').strip("'")
+
+        # Validate the response is a known specialist
+        matched = None
+        for spec in valid_specialists:
+            if spec.lower() == suggested.lower():
+                matched = spec
+                break
+
+        if not matched:
+            # Fuzzy fallback: check if the AI response contains a valid specialist name
+            for spec in valid_specialists:
+                if spec.lower() in suggested.lower():
+                    matched = spec
+                    break
+
+        if not matched:
+            matched = "General Physician"
+
+    except Exception as e:
+        print(f"Gemini suggest-doctors error: {e}")
+        # Intelligent local fallback using weighted keyword scoring
+        matched = _local_symptom_analysis(request.notes)
+
+    # Map specialist name to image and description
+    specialist_info = {
+        "General Physician": {"description": "Helps with everyday health concerns and common symptoms.", "image": "/doctor1.png"},
+        "Pediatrician": {"description": "Expert in children's health, from babies to teens.", "image": "/doctor2.png"},
+        "Dermatologist": {"description": "Handles skin issues like rashes, acne, or infections.", "image": "/doctor3.png"},
+        "Psychologist": {"description": "Supports mental health and emotional well-being.", "image": "/doctor4.png"},
+        "Nutritionist": {"description": "Provides advice on healthy eating and weight management.", "image": "/doctor5.png"},
+        "Cardiologist": {"description": "Focuses on heart health and blood pressure issues.", "image": "/doctor6.png"},
+        "ENT Specialist": {"description": "Handles ear, nose, and throat-related problems.", "image": "/doctor7.png"},
+        "Orthopedic": {"description": "Helps with bone, joint, and muscle pain.", "image": "/doctor8.png"},
+        "Gynecologist": {"description": "Cares for women's reproductive and hormonal health.", "image": "/doctor9.png"},
+        "Dentist": {"description": "Handles oral hygiene and dental problems.", "image": "/doctor10.png"},
+    }
+
+    info = specialist_info.get(matched, specialist_info["General Physician"])
+
     return {
-        "specialist": "General Physician",
-        "description": "Helps with everyday health concerns and common symptoms.",
-        "image": "/doctor1.png"
+        "specialist": matched,
+        "description": info["description"],
+        "image": info["image"],
     }
 
 @router.post("/")
@@ -170,10 +254,10 @@ async def chat_endpoint(
         contents = []
         for msg in request.messages[:-1]:
             role = "user" if msg.role == "user" else "model"
-            contents.append(types.Content(role=role, parts=[types.Part.from_text(msg.content)]))
+            contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg.content)]))
         
         # Add current user message
-        contents.append(types.Content(role="user", parts=[types.Part.from_text(user_msg_content)]))
+        contents.append(types.Content(role="user", parts=[types.Part.from_text(text=user_msg_content)]))
         
         response = client.models.generate_content(
             model="gemini-2.0-flash",
@@ -181,12 +265,11 @@ async def chat_endpoint(
         )
         ai_text = response.text
     except Exception as e:
-        # Rollback or cleanup if needed? 
-        # We already committed the user message (which is fine, it was sent).
-        # We just warn the user.
-        print(f"AI Error: {e}")
-        raise HTTPException(status_code=503, detail="AI Service currently unavailable")
-    
+        # Graceful fallback: session was already created above.
+        # Return sessionId so the user can still navigate to the voice agent.
+        print(f"AI Error (falling back): {e}")
+        ai_text = "I'm ready to help. Please start the voice consultation to speak with me directly."
+
     # 5. Save AI Message
     ai_msg = ChatMessage(
          session_id=chat_session.id,

@@ -3,6 +3,8 @@ import cv2
 import torch
 import logging
 import numpy as np
+import matplotlib
+matplotlib.use('Agg') # MUST BE BEFORE pyplot import! Force headless backend to prevent GUI popups
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.nn.functional as F
@@ -103,6 +105,7 @@ class SkinLesionSegmentation:
             ax.imshow(mask_stacked, alpha=0.4)
             # plt.savefig("overlayed_plot.png", bbox_inches="tight")
             plt.savefig(output_path, bbox_inches="tight")
+            plt.close(fig)
             logger.info("Overlayed segmentation mask saved as 'overlayed_plot.png'")
             # return "overlayed_plot.png"
             return True
@@ -119,11 +122,31 @@ class SkinLesionSegmentation:
             img_tensor = torch.Tensor(img_resized).unsqueeze(0).permute(0, 3, 1, 2).to(self.device)
 
             with torch.no_grad():
-                generated_mask = self.model(img_tensor).squeeze().cpu().numpy()
+                logits = self.model(img_tensor).squeeze()
+                probs = torch.sigmoid(logits)
+                
+                # Create hard mask for overlay
+                generated_mask = (probs > 0.5).cpu().numpy().astype(np.float32)
+                
+                # Calculate confidence score
+                lesion_pixels = probs[probs > 0.5]
+                if len(lesion_pixels) > 0:
+                    # How confident is the network about the lesion
+                    confidence_pct = round(lesion_pixels.mean().item() * 100, 1)
+                else:
+                    # How confident is the network that there is NO lesion
+                    bg_pixels = 1.0 - probs[probs <= 0.5]
+                    confidence_pct = round(bg_pixels.mean().item() * 100, 1)
 
             # Resize mask to match original image dimensions
             generated_mask_resized = cv2.resize(generated_mask, (img.shape[1], img.shape[0]))
-            return self._overlay_mask(img, generated_mask_resized, output_path)
+            self._overlay_mask(img, generated_mask_resized, output_path)
+            
+            return {
+                "success": True,
+                "confidence": confidence_pct,
+                "lesion_detected": len(lesion_pixels) > 0
+            }
 
         except Exception as e:
             logger.error(f"Error during segmentation: {e}")

@@ -123,10 +123,11 @@ class MedicalRAG:
             parsed_document, images = self.doc_parser.parse_document(document_path, self.parsed_content_dir)
             self.logger.info(f"   Parsed document and extracted {len(images)} images")
 
-            # Step 2: Summarize images
-            self.logger.info("2. Summarizing images...")
-            image_summaries = self.content_processor.summarize_images(images)
-            self.logger.info(f"   Generated {len(image_summaries)} image summaries")
+            # Step 2: Summarize images (Temporarily disabled to avoid rate limits)
+            self.logger.info("2. Summarizing images (SKIPPED)...")
+            # image_summaries = self.content_processor.summarize_images(images)
+            image_summaries = ["no summary"] * len(images)
+            self.logger.info(f"   Generated {len(image_summaries)} image summaries (placeholders)")
 
             # Step 3: Format document with image summaries
             self.logger.info("3. Formatting document with image summaries...")

@@ -49,14 +49,14 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_chat_messages_session_id'), 'chat_messages', ['session_id'], unique=False)
-    op.drop_index(op.f('Report_createdAt_idx'), table_name='Report')
-    op.drop_index(op.f('Report_userId_idx'), table_name='Report')
-    op.drop_table('Report')
-    op.drop_index(op.f('Session_sessionId_key'), table_name='Session')
-    op.drop_table('Session')
-    op.drop_table('_prisma_migrations')
-    op.drop_index(op.f('User_email_key'), table_name='User')
-    op.drop_table('User')
+    # op.drop_index(op.f('Report_createdAt_idx'), table_name='Report')
+    # op.drop_index(op.f('Report_userId_idx'), table_name='Report')
+    # op.drop_table('Report')
+    # op.drop_index(op.f('Session_sessionId_key'), table_name='Session')
+    # op.drop_table('Session')
+    # op.drop_table('_prisma_migrations')
+    # op.drop_index(op.f('User_email_key'), table_name='User')
+    # op.drop_table('User')
     # ### end Alembic commands ###
 
 

@@ -13,7 +13,6 @@ export type Doctor = {
   image: string
   agentPrompt: string
   voiceId: string
-  subscriptionRequired?: boolean
 }
 
 function DoctorsList() {
@@ -26,22 +25,28 @@ function DoctorsList() {
   }
 
   return (
-    <div className='mt-10'>
-      <h2 className="text-2xl font-bold">AI Specialist Doctors Agents</h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 mt-5">
+    <div className='mt-8'>
+      <h2 className="text-sm font-semibold tracking-widest text-gray-500 uppercase px-1 mb-5">AI Specialist Directory</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {
           AIDoctorAgents.map((doctor: Doctor) => (
             <div
               key={doctor.id}
-              className='border-2 border-gray-200 rounded-2xl p-4 cursor-pointer hover:border-primary/40 transition-colors'
+              className='group relative flex flex-col bg-white dark:bg-[#111111] border border-gray-100 dark:border-white/5 rounded-3xl p-5 cursor-pointer shadow-[0_2px_12px_rgba(0,0,0,0.02)] hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_16px_40px_rgba(0,0,0,0.2)] transition-all duration-300 ease-out overflow-hidden'
               onClick={() => handleDoctorClick(doctor)}
             >
-              <Image src={doctor.image} alt={doctor.specialist} width={100} height={100} className='rounded-xl w-full h-[250px] object-cover' />
-              <h2 className="font-bold mt-1">{doctor.specialist}</h2>
-              <p className="line-clamp-2 text-sm text-gray-500">{doctor.description}</p>
-              <Button variant="outline" className='bg-black text-white mt-2 w-full hover:bg-gray-800'>
-                Start Consultation <IoArrowForward />
-              </Button>
+              <div className="relative w-full aspect-square mb-4 rounded-2xl overflow-hidden bg-gray-50 dark:bg-white/5">
+                <Image src={doctor.image} alt={doctor.specialist} fill className='object-cover group-hover:scale-105 transition-transform duration-500' />
+              </div>
+
+              <div className="flex flex-col flex-1">
+                <h3 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-white mb-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{doctor.specialist}</h3>
+                <p className="line-clamp-2 text-sm text-gray-500 dark:text-gray-400 mb-6 leading-relaxed flex-1">{doctor.description}</p>
+
+                <Button variant="outline" className='w-full rounded-full bg-gray-50 dark:bg-white/5 border-transparent text-gray-900 dark:text-white hover:bg-gray-900 transition-all duration-300 hover:text-white group-hover:border-gray-900 dark:group-hover:border-white shadow-none'>
+                  Start Consultation <IoArrowForward className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </div>
             </div>
           ))
         }

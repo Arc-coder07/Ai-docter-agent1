@@ -20,6 +20,7 @@ type Message = {
     role: string
     content: string
     created_at: string
+    image_url?: string
 }
 
 type Summary = {
@@ -117,6 +118,8 @@ export default function SessionDetailPage() {
         return new Date(dateString).toLocaleString()
     }
 
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
     return (
         <div className="p-6 max-w-4xl mx-auto">
             {/* Header */}
@@ -208,10 +211,25 @@ export default function SessionDetailPage() {
                                     )}
                                 </div>
                                 <div className={`max-w-[80%] rounded-xl p-3 ${msg.role === 'user'
-                                        ? 'bg-blue-50 text-gray-800'
-                                        : 'bg-gray-50 text-gray-800'
+                                    ? 'bg-blue-50 text-gray-800'
+                                    : 'bg-gray-50 text-gray-800'
                                     }`}>
                                     <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+
+                                    {msg.image_url && (
+                                        <div className="mt-3">
+                                            <img
+                                                src={msg.image_url.startsWith('http') ? msg.image_url : `${API_URL}${msg.image_url}`}
+                                                alt="Uploaded or generated content"
+                                                className="max-w-[300px] rounded-lg overflow-hidden cursor-pointer hover:opacity-90 border border-gray-200"
+                                                onClick={() => {
+                                                    const url = msg.image_url?.startsWith('http') ? msg.image_url : `${API_URL}${msg.image_url}`
+                                                    if (url) window.open(url, '_blank')
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+
                                     <p className="text-xs text-gray-400 mt-1">
                                         {formatDate(msg.created_at)}
                                     </p>

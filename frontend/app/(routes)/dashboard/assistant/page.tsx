@@ -2,7 +2,36 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import axios from 'axios'
-import Link from 'next/link'
+import ReactMarkdown from 'react-markdown'
+import {
+    Bot,
+    Brain,
+    Stethoscope,
+    Search,
+    MessageCircle,
+    Microscope,
+    Scan,
+    Image as ImageIcon,
+    Mic,
+    MicOff,
+    Send,
+    PanelLeftClose,
+    PanelLeftOpen,
+    Volume2,
+    VolumeX,
+    Trash2,
+    CheckCircle,
+    XCircle,
+    Paperclip,
+    X,
+    Loader2,
+    ChevronDown,
+    BookOpen,
+    Shield,
+    Zap,
+    Plus,
+} from 'lucide-react'
+import { colors, layout } from '@/lib/design.config'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -15,13 +44,59 @@ type Message = {
     needs_validation?: boolean
 }
 
+// Agent metadata for badges
+const AGENT_META: Record<string, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
+    'CONVERSATION_AGENT': { label: 'Conversation', icon: <MessageCircle className="w-3 h-3" />, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-500/20' },
+    'RAG_AGENT': { label: 'Medical RAG', icon: <BookOpen className="w-3 h-3" />, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-500/20' },
+    'WEB_SEARCH_PROCESSOR_AGENT': { label: 'Web Search', icon: <Search className="w-3 h-3" />, color: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-100 dark:bg-violet-500/20' },
+    'BRAIN_TUMOR_AGENT': { label: 'Brain Tumor', icon: <Brain className="w-3 h-3" />, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-100 dark:bg-orange-500/20' },
+    'CHEST_XRAY_AGENT': { label: 'Chest X-ray', icon: <Scan className="w-3 h-3" />, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-100 dark:bg-red-500/20' },
+    'SKIN_LESION_AGENT': { label: 'Skin Lesion', icon: <Microscope className="w-3 h-3" />, color: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-100 dark:bg-pink-500/20' },
+    'HUMAN_VALIDATED': { label: 'Validated', icon: <CheckCircle className="w-3 h-3" />, color: 'text-green-700 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-500/20' },
+    'System': { label: 'System', icon: <Bot className="w-3 h-3" />, color: 'text-gray-500 dark:text-gray-400', bg: 'bg-gray-100 dark:bg-gray-500/20' },
+}
+
+function AgentBadge({ agent }: { agent?: string }) {
+    if (!agent) return null
+    // Handle combined agent names like "RAG_AGENT, WEB_SEARCH_PROCESSOR_AGENT"
+    const primaryAgent = agent.split(',')[0].trim()
+    const meta = AGENT_META[primaryAgent] || AGENT_META['System']
+    return (
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium ${layout.borderRadius.badge} ${meta.bg} ${meta.color} transition-all`}>
+            {meta.icon}
+            {meta.label}
+        </span>
+    )
+}
+
+// Sidebar agent definitions
+const AGENT_LIST = [
+    { name: 'Medical Conversation', icon: <MessageCircle className="w-4 h-4" />, desc: 'General health chat', colorClass: 'text-emerald-500' },
+    { name: 'Medical RAG', icon: <BookOpen className="w-4 h-4" />, desc: 'Knowledge retrieval', colorClass: 'text-blue-500' },
+    { name: 'Web Search', icon: <Search className="w-4 h-4" />, desc: 'Latest medical info', colorClass: 'text-violet-500' },
+]
+
+const CV_AGENTS = [
+    { name: 'Brain Tumor Detection', icon: <Brain className="w-4 h-4" />, desc: 'MRI classification', colorClass: 'text-orange-500' },
+    { name: 'Chest X-ray COVID-19', icon: <Scan className="w-4 h-4" />, desc: 'X-ray analysis', colorClass: 'text-red-500' },
+    { name: 'Skin Lesion Analysis', icon: <Microscope className="w-4 h-4" />, desc: 'Skin segmentation', colorClass: 'text-pink-500' },
+]
+
+const RAG_CAPABILITIES = [
+    'Docling PDF parsing',
+    'LLM semantic chunking',
+    'Qdrant hybrid search',
+    'Input-output guardrails',
+    'Confidence-based web fallback',
+]
+
 export default function MedicalAssistantPage() {
     const { getToken } = useAuth()
     const [messages, setMessages] = useState<Message[]>([
         {
             id: '0',
             role: 'assistant',
-            content: "Hello! I'm your medical assistant. You can ask me health-related questions or upload medical images for analysis.",
+            content: "Hello! I'm your **Medical AI Assistant**. I can help you with:\n\n- 💬 Health-related questions\n- 📄 Medical knowledge retrieval\n- 🧠 Brain MRI classification\n- 🫁 Chest X-ray COVID detection\n- 🔬 Skin lesion segmentation\n\nAsk me anything or upload a medical image to get started!",
             agent: 'System'
         }
     ])
@@ -34,11 +109,13 @@ export default function MedicalAssistantPage() {
     const [isRecording, setIsRecording] = useState(false)
     const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null)
     const [playingMessageId, setPlayingMessageId] = useState<string | null>(null)
+    const [sidebarOpen, setSidebarOpen] = useState(true)
 
     const fileInputRef = useRef<HTMLInputElement>(null)
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const audioChunksRef = useRef<Blob[]>([])
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
 
     const getAuthHeaders = async () => {
         const token = await getToken()
@@ -48,6 +125,14 @@ export default function MedicalAssistantPage() {
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
+
+    // Auto-resize textarea
+    useEffect(() => {
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto'
+            textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`
+        }
+    }, [input])
 
     const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -78,7 +163,6 @@ export default function MedicalAssistantPage() {
                     const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
                     stream.getTracks().forEach(track => track.stop())
 
-                    // Transcribe
                     const formData = new FormData()
                     formData.append('audio', audioBlob, 'recording.webm')
                     try {
@@ -194,12 +278,13 @@ export default function MedicalAssistantPage() {
                 }
                 setMessages(prev => [...prev, imageMessage])
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error:', error)
+            const errorDetail = error.response?.data?.detail || 'An unexpected error occurred.'
             setMessages(prev => [...prev, {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: 'Sorry, there was an error processing your request. Please try again.',
+                content: `⚠️ **Error:** ${errorDetail}\n\nPlease try again or rephrase your question.`,
                 agent: 'System'
             }])
         } finally {
@@ -236,23 +321,11 @@ export default function MedicalAssistantPage() {
         setMessages([{
             id: '0',
             role: 'assistant',
-            content: "Hello! I'm your medical assistant. You can ask me health-related questions or upload medical images for analysis.",
+            content: "Hello! I'm your **Medical AI Assistant**. I can help you with:\n\n- 💬 Health-related questions\n- 📄 Medical knowledge retrieval\n- 🧠 Brain MRI classification\n- 🫁 Chest X-ray COVID detection\n- 🔬 Skin lesion segmentation\n\nAsk me anything or upload a medical image to get started!",
             agent: 'System'
         }])
         setSessionId(null)
         setPendingValidation(false)
-    }
-
-    const getAgentBadgeColor = (agent?: string) => {
-        if (!agent) return 'bg-gray-100 text-gray-700'
-        if (agent.includes('RAG')) return 'bg-blue-100 text-blue-700'
-        if (agent.includes('WEB_SEARCH')) return 'bg-purple-100 text-purple-700'
-        if (agent.includes('CHEST_XRAY') || agent.includes('COVID')) return 'bg-red-100 text-red-700'
-        if (agent.includes('BRAIN_TUMOR')) return 'bg-orange-100 text-orange-700'
-        if (agent.includes('SKIN_LESION')) return 'bg-pink-100 text-pink-700'
-        if (agent.includes('CONVERSATION')) return 'bg-green-100 text-green-700'
-        if (agent === 'System') return 'bg-gray-100 text-gray-600'
-        return 'bg-blue-100 text-blue-700'
     }
 
     const removeMarkdown = (text: string) => {
@@ -269,145 +342,201 @@ export default function MedicalAssistantPage() {
     }
 
     return (
-        <div className="flex h-[calc(100vh-80px)] bg-gray-100 p-4 gap-4">
-            {/* Sidebar */}
-            <div className="w-72 bg-white rounded-2xl shadow-sm p-5 overflow-y-auto flex-shrink-0">
-                <div className="flex items-center gap-2 mb-4 pb-4 border-b">
-                    <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                    </svg>
-                    <h2 className="font-semibold text-gray-800">Medical Assistant</h2>
-                </div>
+        <div className="flex h-[calc(100vh-32px)] gap-3 p-2">
 
-                <div className="mb-5">
-                    <h3 className="text-sm font-semibold text-blue-600 mb-2">Available Agents</h3>
-                    <ul className="text-sm text-gray-600 space-y-2">
-                        <li className="flex items-center gap-2">
-                            <span className="text-green-500">💬</span> Medical Conversation Agent
-                        </li>
-                        <li className="flex items-center gap-2">
-                            <span className="text-blue-500">📚</span> Medical RAG Agent
-                        </li>
-                        <li className="flex items-center gap-2">
-                            <span className="text-purple-500">🔍</span> Web Search Agent
-                        </li>
-                    </ul>
-                </div>
-
-                <div className="mb-5">
-                    <h3 className="text-sm font-semibold text-blue-600 mb-2">Computer Vision Agents</h3>
-                    <ul className="text-sm text-gray-600 space-y-2">
-                        <li className="flex items-center gap-2">
-                            <span className="text-orange-500">🧠</span> Brain Tumor Detection
-                        </li>
-                        <li className="flex items-center gap-2">
-                            <span className="text-red-500">🫁</span> Chest X-ray COVID-19
-                        </li>
-                        <li className="flex items-center gap-2">
-                            <span className="text-pink-500">🔬</span> Skin Lesion Segmentation
-                        </li>
-                    </ul>
-                </div>
-
-                <div className="mb-5">
-                    <h3 className="text-sm font-semibold text-blue-600 mb-2">RAG Capabilities</h3>
-                    <ul className="text-xs text-gray-500 space-y-1 list-disc pl-4">
-                        <li>Docling PDF parsing</li>
-                        <li>LLM semantic chunking</li>
-                        <li>Qdrant hybrid search</li>
-                        <li>Input-output guardrails</li>
-                        <li>Confidence-based web fallback</li>
-                    </ul>
-                </div>
-
-                <button
-                    onClick={clearChat}
-                    className="w-full py-2 px-4 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition text-sm flex items-center justify-center gap-2"
-                >
-                    🗑️ Clear Conversation
-                </button>
-            </div>
-
-            {/* Main Chat Area */}
-            <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm overflow-hidden">
-                {/* Header */}
-                <div className="p-4 border-b bg-gray-50">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                                🩺 Multi-Agent Medical Assistant
-                            </h1>
-                            <p className="text-sm text-gray-500">Upload medical images or ask health-related questions</p>
+            {/* ── SIDEBAR ── */}
+            <aside
+                className={`flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out overflow-hidden
+                    ${sidebarOpen ? 'w-[260px]' : 'w-0'}
+                    bg-white/80 dark:bg-[#111111]/80 backdrop-blur-xl border border-gray-200/50 dark:border-white/10 rounded-3xl
+                    shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)]`}
+            >
+                <div className={`flex flex-col h-full ${sidebarOpen ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`}>
+                    {/* Sidebar Header */}
+                    <div className="px-5 py-4 border-b border-gray-100/50 dark:border-white/5 flex-shrink-0">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
+                                <Bot className="w-4 h-4 text-white" />
+                            </div>
+                            <div>
+                                <h2 className="text-sm font-semibold text-gray-900 dark:text-white tracking-tight">AI Agents</h2>
+                                <p className="text-[10px] text-gray-500 dark:text-gray-400">Multi-agent system</p>
+                            </div>
                         </div>
-                        <Link href="/dashboard" className="text-sm text-blue-600 hover:underline">
-                            ← Back to Dashboard
-                        </Link>
+                    </div>
+
+                    {/* Agent Lists */}
+                    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 no-scrollbar">
+                        {/* Text Agents */}
+                        <div>
+                            <h3 className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 px-1">Text Agents</h3>
+                            <div className="space-y-1">
+                                {AGENT_LIST.map((a) => (
+                                    <div key={a.name} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 transition-colors group">
+                                        <span className={`${a.colorClass} group-hover:scale-110 transition-transform`}>{a.icon}</span>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{a.name}</p>
+                                            <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{a.desc}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Vision Agents */}
+                        <div>
+                            <h3 className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 px-1">Vision Agents</h3>
+                            <div className="space-y-1">
+                                {CV_AGENTS.map((a) => (
+                                    <div key={a.name} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 transition-colors group">
+                                        <span className={`${a.colorClass} group-hover:scale-110 transition-transform`}>{a.icon}</span>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{a.name}</p>
+                                            <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{a.desc}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* RAG Capabilities */}
+                        <div>
+                            <h3 className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 px-1">RAG Pipeline</h3>
+                            <ul className="space-y-1 px-1">
+                                {RAG_CAPABILITIES.map((c) => (
+                                    <li key={c} className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                                        <div className="w-1 h-1 rounded-full bg-purple-400 flex-shrink-0" />
+                                        {c}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+
+                    {/* Sidebar Footer */}
+                    <div className="px-4 py-3 border-t border-gray-100/50 dark:border-white/5 flex-shrink-0 space-y-2">
+                        <button
+                            onClick={clearChat}
+                            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-medium
+                                text-red-500 hover:text-red-600 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20
+                                transition-all duration-200"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Clear Conversation
+                        </button>
+                    </div>
+                </div>
+            </aside>
+
+            {/* ── MAIN CHAT AREA ── */}
+            <main className="flex-1 flex flex-col bg-white/80 dark:bg-[#111111]/80 backdrop-blur-xl 
+                border border-gray-200/50 dark:border-white/10 rounded-3xl 
+                shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden">
+
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100/50 dark:border-white/5 flex-shrink-0">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setSidebarOpen(!sidebarOpen)}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-gray-500 dark:text-gray-400"
+                            title={sidebarOpen ? 'Hide agents panel' : 'Show agents panel'}
+                        >
+                            {sidebarOpen ? <PanelLeftClose className="w-4.5 h-4.5" /> : <PanelLeftOpen className="w-4.5 h-4.5" />}
+                        </button>
+                        <div>
+                            <h1 className="text-sm font-semibold text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
+                                <Stethoscope className="w-4 h-4 text-purple-500" />
+                                Multi-Agent Medical Assistant
+                            </h1>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400">Upload images or ask health questions — AI agents respond automatically</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400">
+                            <Zap className="w-3 h-3" /> 6 Agents
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400">
+                            <Shield className="w-3 h-3" /> Guardrails
+                        </span>
                     </div>
                 </div>
 
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 no-scrollbar">
                     {messages.map((msg) => (
                         <div
                             key={msg.id}
-                            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}
                         >
-                            <div
-                                className={`max-w-[75%] rounded-2xl p-4 ${msg.role === 'user'
-                                        ? 'bg-blue-100 rounded-br-none'
-                                        : 'bg-gray-100 rounded-bl-none'
-                                    }`}
+                            <div className={`max-w-[75%] ${msg.role === 'user'
+                                ? 'bg-gradient-to-br from-purple-500 to-violet-600 text-white rounded-2xl rounded-br-md shadow-lg shadow-purple-500/10'
+                                : 'bg-gray-50 dark:bg-white/5 text-gray-800 dark:text-gray-200 rounded-2xl rounded-bl-md border border-gray-100 dark:border-white/10'
+                                } px-4 py-3`}
                             >
+                                {/* Agent Badge */}
                                 {msg.agent && msg.role === 'assistant' && (
-                                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium mb-2 ${getAgentBadgeColor(msg.agent)}`}>
-                                        {msg.agent}
-                                    </span>
-                                )}
-
-                                {msg.image_url && (
                                     <div className="mb-2">
-                                        <img src={msg.image_url} alt="Medical" className="rounded-lg max-h-48 object-contain" />
+                                        <AgentBadge agent={msg.agent} />
                                     </div>
                                 )}
 
-                                <div
-                                    className="text-sm text-gray-800 prose prose-sm max-w-none"
-                                    dangerouslySetInnerHTML={{
-                                        __html: msg.content
-                                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                            .replace(/\n/g, '<br>')
-                                    }}
-                                />
+                                {/* Image */}
+                                {msg.image_url && (
+                                    <div className="mb-2">
+                                        <img
+                                            src={msg.image_url.startsWith('http') || msg.image_url.startsWith('data:')
+                                                ? msg.image_url
+                                                : `${API_URL}${msg.image_url}`
+                                            }
+                                            alt="Medical"
+                                            className="rounded-xl max-h-52 object-contain border border-gray-200/30 dark:border-white/10"
+                                        />
+                                    </div>
+                                )}
 
+                                {/* Content */}
+                                <div className={`text-sm leading-relaxed prose prose-sm max-w-none ${msg.role === 'user'
+                                    ? 'prose-invert'
+                                    : 'prose-gray dark:prose-invert'
+                                    }`}
+                                >
+                                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                </div>
+
+                                {/* TTS Button */}
                                 {msg.role === 'assistant' && msg.agent !== 'System' && (
                                     <button
                                         onClick={() => playTTS(removeMarkdown(msg.content), msg.id)}
-                                        className={`mt-2 text-xs px-3 py-1 rounded-full border transition ${playingMessageId === msg.id
-                                                ? 'bg-blue-600 text-white border-blue-600'
-                                                : 'border-blue-300 text-blue-600 hover:bg-blue-50'
+                                        className={`mt-2 inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border transition-all duration-200
+                                            ${playingMessageId === msg.id
+                                                ? 'bg-purple-600 text-white border-purple-600 shadow-sm shadow-purple-500/20'
+                                                : 'border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10'
                                             }`}
                                     >
-                                        {playingMessageId === msg.id ? '⏸ Pause' : '▶ Play Voice'}
+                                        {playingMessageId === msg.id ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                                        {playingMessageId === msg.id ? 'Stop' : 'Listen'}
                                     </button>
                                 )}
 
+                                {/* Human Validation */}
                                 {msg.needs_validation && pendingValidation && (
-                                    <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                                        <p className="text-sm font-medium text-yellow-800 mb-2">
-                                            ⚠️ Human Validation Required
+                                    <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl">
+                                        <p className="text-xs font-medium text-amber-800 dark:text-amber-300 mb-2 flex items-center gap-1.5">
+                                            <Shield className="w-3.5 h-3.5" />
+                                            Human Validation Required
                                         </p>
                                         <div className="flex gap-2">
                                             <button
                                                 onClick={() => handleValidation(true)}
-                                                className="px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm"
                                             >
-                                                ✓ Confirm
+                                                <CheckCircle className="w-3 h-3" /> Confirm
                                             </button>
                                             <button
                                                 onClick={() => handleValidation(false)}
-                                                className="px-3 py-1 border border-red-300 text-red-600 text-sm rounded-lg hover:bg-red-50"
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 border border-red-300 dark:border-red-500/30 text-red-600 dark:text-red-400 text-xs font-medium rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
                                             >
-                                                ✗ Reject
+                                                <XCircle className="w-3 h-3" /> Reject
                                             </button>
                                         </div>
                                     </div>
@@ -416,12 +545,12 @@ export default function MedicalAssistantPage() {
                         </div>
                     ))}
 
+                    {/* Loading indicator */}
                     {isLoading && (
-                        <div className="flex justify-start">
-                            <div className="bg-gray-100 rounded-2xl rounded-bl-none p-4 flex gap-1">
-                                <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        <div className="flex justify-start animate-in fade-in duration-300">
+                            <div className="bg-gray-50 dark:bg-white/5 rounded-2xl rounded-bl-md border border-gray-100 dark:border-white/10 px-4 py-3 flex items-center gap-2">
+                                <Loader2 className="w-4 h-4 text-purple-500 animate-spin" />
+                                <span className="text-xs text-gray-500 dark:text-gray-400">Processing your request...</span>
                             </div>
                         </div>
                     )}
@@ -430,22 +559,22 @@ export default function MedicalAssistantPage() {
 
                 {/* Image Preview */}
                 {imagePreview && (
-                    <div className="px-4 py-2 bg-gray-50 border-t flex items-center gap-3">
+                    <div className="mx-4 mb-1 px-3 py-2 bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl flex items-center gap-3">
                         <div className="relative">
-                            <img src={imagePreview} alt="Preview" className="h-14 w-14 object-cover rounded-lg border" />
+                            <img src={imagePreview} alt="Preview" className="h-12 w-12 object-cover rounded-lg border border-gray-200 dark:border-white/10" />
                             <button
                                 onClick={removeImage}
-                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
+                                className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center shadow-sm hover:bg-red-600 transition-colors"
                             >
-                                ×
+                                <X className="w-2.5 h-2.5" />
                             </button>
                         </div>
-                        <span className="text-sm text-gray-600">{selectedImage?.name}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{selectedImage?.name}</span>
                     </div>
                 )}
 
                 {/* Input Area */}
-                <div className="p-4 border-t bg-gray-50">
+                <div className="px-4 py-3 border-t border-gray-100/50 dark:border-white/5 flex-shrink-0">
                     <div className="flex items-end gap-2">
                         <input
                             type="file"
@@ -455,26 +584,30 @@ export default function MedicalAssistantPage() {
                             className="hidden"
                         />
 
+                        {/* Attach Image */}
                         <button
                             onClick={() => fileInputRef.current?.click()}
-                            className="p-2.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition"
+                            className="p-2 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/15 transition-colors flex-shrink-0"
                             title="Upload Image"
                         >
-                            📎
+                            <Paperclip className="w-4 h-4" />
                         </button>
 
+                        {/* Voice Record */}
                         <button
                             onClick={toggleRecording}
-                            className={`p-2.5 rounded-full transition ${isRecording
-                                    ? 'bg-red-500 text-white animate-pulse'
-                                    : 'bg-yellow-500 text-white hover:bg-yellow-600'
+                            className={`p-2 rounded-xl transition-all duration-200 flex-shrink-0 ${isRecording
+                                ? 'bg-red-500 text-white shadow-sm shadow-red-500/20 animate-pulse'
+                                : 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/15'
                                 }`}
                             title={isRecording ? 'Stop Recording' : 'Start Recording'}
                         >
-                            {isRecording ? '⏹' : '🎤'}
+                            {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                         </button>
 
+                        {/* Text Input */}
                         <textarea
+                            ref={textareaRef}
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => {
@@ -484,21 +617,27 @@ export default function MedicalAssistantPage() {
                                 }
                             }}
                             placeholder="Ask a medical question..."
-                            className="flex-1 resize-none border rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px] max-h-[100px]"
+                            className="flex-1 resize-none border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 rounded-xl px-3 py-2.5
+                                text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500
+                                focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-300 dark:focus:border-purple-500/40
+                                min-h-[40px] max-h-[120px] transition-all"
                             rows={1}
                             disabled={isLoading}
                         />
 
+                        {/* Send Button */}
                         <button
                             onClick={sendMessage}
                             disabled={isLoading || (!input.trim() && !selectedImage)}
-                            className="p-2.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50"
+                            className="p-2.5 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 text-white 
+                                shadow-lg shadow-purple-500/20 hover:shadow-xl hover:shadow-purple-500/30 hover:scale-[1.02]
+                                transition-all duration-200 disabled:opacity-40 disabled:shadow-none disabled:hover:scale-100 flex-shrink-0"
                         >
-                            ➤
+                            <Send className="w-4 h-4" />
                         </button>
                     </div>
                 </div>
-            </div>
+            </main>
         </div>
     )
 }

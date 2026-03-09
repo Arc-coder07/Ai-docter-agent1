@@ -57,16 +57,20 @@ class ContentProcessor:
         prompt = ChatPromptTemplate.from_messages(messages)
         summary_chain = prompt | self.summarizer_model | StrOutputParser()
         
+        import time
         results = []
         for image in images:
             try:
                 summary = summary_chain.invoke({"image": image})
                 results.append(summary)
+                # Sleep to avoid rate limits on free tier
+                time.sleep(2)
             except Exception as e:
                 # Log the error if needed
                 print(f"Error processing image: {str(e)}")
                 # Add placeholder for the failed image
                 results.append("no image summary")
+                time.sleep(1)
         
         return results
     
@@ -142,39 +146,30 @@ class ContentProcessor:
         SPLIT_PATTERN = "\n#"
         chunks = formatted_document.split(SPLIT_PATTERN)
         
-        chunked_text = ""
+        result_chunks = []
         for i, chunk in enumerate(chunks):
             if chunk.startswith("#"):
                 chunk = f"#{chunk}"  # add the # back to the chunk
-            chunked_text += f"<|start_chunk_{i}|>\n{chunk}\n<|end_chunk_{i}|>\n"
-        
-        # LLM-based semantic chunking
-        CHUNKING_PROMPT = """
-        You are an assistant specialized in splitting text into semantically consistent sections. 
-        
-        Following is the document text:
-        <document>
-        {document_text}
-        </document>
-        
-        <instructions>
-        Instructions:
-            1. The text has been divided into chunks, each marked with <|start_chunk_X|> and <|end_chunk_X|> tags, where X is the chunk number.
-            2. Identify points where splits should occur, such that consecutive chunks of similar themes stay together.
-            3. Each chunk must be between 256 and 512 words.
-            4. If chunks 1 and 2 belong together but chunk 3 starts a new topic, suggest a split after chunk 2.
-            5. The chunks must be listed in ascending order.
-            6. Provide your response in the form: 'split_after: 3, 5'.
-        </instructions>
-        
-        Respond only with the IDs of the chunks where you believe a split should occur.
-        YOU MUST RESPOND WITH AT LEAST ONE SPLIT.
-        """.strip()
-        
-        formatted_chunking_prompt = CHUNKING_PROMPT.format(document_text=chunked_text)
-        chunking_response = self.chunker_model.invoke(formatted_chunking_prompt).content
-        
-        return self._split_text_by_llm_suggestions(chunked_text, chunking_response)
+                
+            chunk = chunk.strip()
+            if chunk:
+                # Basic size limitation logic to prevent giant chunks
+                if len(chunk) > 3000:
+                    subchunks = chunk.split("\n\n")
+                    current_subchunk = ""
+                    for sub in subchunks:
+                        if len(current_subchunk) + len(sub) > 2000:
+                            if current_subchunk.strip():
+                                result_chunks.append(current_subchunk.strip())
+                            current_subchunk = sub + "\n\n"
+                        else:
+                            current_subchunk += sub + "\n\n"
+                    if current_subchunk.strip():
+                        result_chunks.append(current_subchunk.strip())
+                else:
+                    result_chunks.append(chunk)
+                    
+        return result_chunks
     
     def _split_text_by_llm_suggestions(self, chunked_text: str, llm_response: str) -> List[str]:
         """

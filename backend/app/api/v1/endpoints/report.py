@@ -3,8 +3,12 @@ Health Report Analysis API Endpoints
 """
 import os
 import uuid
+import logging
+import traceback
 from typing import Optional, List
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
@@ -157,6 +161,11 @@ async def chat_with_report(
         raise HTTPException(status_code=404, detail="Report not found")
     
     try:
+        # Ensure report has text for RAG
+        report_text = report.report_text or ""
+        if not report_text.strip():
+            logger.warning(f"Report {request.report_id} has empty report_text, chat may have limited context")
+        
         # Get chat history for this report
         messages = db.exec(
             select(HealthReportMessage).where(
@@ -183,7 +192,7 @@ async def chat_with_report(
         response = agent.get_response(
             query=request.message,
             report_id=str(report.id),
-            report_text=report.report_text,
+            report_text=report_text,
             chat_history=chat_history
         )
         
@@ -200,7 +209,8 @@ async def chat_with_report(
         
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Report chat error for report_id={request.report_id}: {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
 
 
 @router.get("/history")
