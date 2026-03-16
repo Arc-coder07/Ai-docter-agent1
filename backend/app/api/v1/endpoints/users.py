@@ -7,6 +7,35 @@ from app.schemas import CreateUserRequest
 
 router = APIRouter()
 
+@router.get("/me")
+def get_current_user_profile(
+    claims: dict = Depends(get_current_user),
+    db: Session = Depends(get_session)
+):
+    """Return the current authenticated user's health profile data."""
+    clerk_user_id = claims["sub"]
+    statement = select(User).where(User.clerk_id == clerk_user_id)
+    user = db.exec(statement).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {
+        "name": user.name,
+        "email": user.email,
+        "role": user.role,
+        "gender": user.gender,
+        "date_of_birth": user.date_of_birth,
+        "blood_group": user.blood_group,
+        "height_cm": user.height_cm,
+        "weight_kg": user.weight_kg,
+        "allergies": user.allergies,
+        "chronic_conditions": user.chronic_conditions,
+        "current_medications": user.current_medications,
+        "emergency_contact_name": user.emergency_contact_name,
+        "emergency_contact_phone": user.emergency_contact_phone,
+    }
+
 @router.post("/")
 def create_user(
     request: CreateUserRequest,

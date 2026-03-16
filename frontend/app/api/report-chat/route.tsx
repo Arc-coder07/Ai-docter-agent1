@@ -3,11 +3,13 @@ import { db } from "@/lib/db";
 import { currentUser } from "@clerk/nextjs/server";
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
-});
-
 export async function POST(req: NextRequest) {
+  const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: "OpenAI API key not configured" }, { status: 500 });
+  }
+  const openai = new OpenAI({ apiKey });
+
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -15,7 +17,7 @@ export async function POST(req: NextRequest) {
     const { reportId, messages, newMessage } = await req.json();
 
     if (!reportId || !newMessage) {
-        return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
     // 1. Fetch the report to get the raw text context
@@ -46,15 +48,15 @@ export async function POST(req: NextRequest) {
     const apiMessages = [
       { role: "system", content: systemPrompt },
       ...messages.map((msg: any) => ({
-          role: msg.role === 'user' ? 'user' : 'assistant',
-          content: msg.content
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content
       })),
       { role: "user", content: newMessage }
     ];
 
     // 4. Generate Response
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o", 
+      model: "gpt-4o",
       messages: apiMessages as any,
     });
 

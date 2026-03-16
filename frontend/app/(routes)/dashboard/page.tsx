@@ -6,12 +6,13 @@ import { useApiClient } from "@/lib/api"
 import { branding, colors, dashboardFeatures, dashboardStats, gradients, layout } from '@/lib/design.config'
 import {
   Mic, Bot, FileText, History, Calendar, ArrowRight,
-  Activity, Clock, Sparkles, TrendingUp, Shield, Zap
+  Activity, Clock, Sparkles, TrendingUp, Shield, Zap,
+  PieChart as PieChartIcon, Pill, Brain
 } from 'lucide-react'
 
 // Map icon strings → components (from design config)
 const iconMap: Record<string, React.ComponentType<any>> = {
-  Mic, Bot, FileText, History, Calendar, Activity, Sparkles, TrendingUp, Shield, Zap, Clock
+  Mic, Bot, FileText, History, Calendar, Activity, Sparkles, TrendingUp, Shield, Zap, Clock, Pill, Brain
 }
 
 const badgeIconMap: Record<string, React.ComponentType<any>> = {
@@ -29,6 +30,7 @@ export default function DashboardPage() {
   const { user } = useUser()
   const apiClient = useApiClient()
   const [recentSessions, setRecentSessions] = useState<RecentActivity[]>([])
+  const [allSessions, setAllSessions] = useState<RecentActivity[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -38,13 +40,14 @@ export default function DashboardPage() {
   const loadRecentActivity = async () => {
     try {
       const response = await apiClient('/history/sessions')
-      const sessions = response.data.slice(0, 5).map((s: any) => ({
+      const sessions = response.data.map((s: any) => ({
         id: s.id,
         title: s.title || 'Untitled Session',
         type: s.conversation_type || 'voice_consultation',
         created_at: s.created_at
       }))
-      setRecentSessions(sessions)
+      setAllSessions(sessions)
+      setRecentSessions(sessions.slice(0, 5))
     } catch (error) {
       console.error('Failed to load recent activity:', error)
     } finally {
@@ -82,10 +85,35 @@ export default function DashboardPage() {
     }
   }
 
+  // Generate last 7 days data for chart
+  const getWeeklyData = () => {
+    const data = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      const dateStr = d.toISOString().split('T')[0]
+      const count = allSessions.filter(s => s.created_at.startsWith(dateStr)).length
+      data.push({ day: d.toLocaleDateString('en-US', { weekday: 'short' }), count })
+    }
+    return data
+  }
+  const weeklyData = getWeeklyData()
+  const maxCount = Math.max(...weeklyData.map(d => d.count), 1)
+
+  const typeDistribution = [
+    { type: 'AI Assistant', count: allSessions.filter(s => s.type === 'medical_assistant').length, color: 'bg-purple-100 text-purple-700' },
+    { type: 'Reports', count: allSessions.filter(s => s.type === 'report_analysis').length, color: 'bg-rose-100 text-rose-700' },
+    { type: 'Consultations', count: allSessions.filter(s => s.type === 'voice_consultation').length, color: 'bg-blue-100 text-blue-700' }
+  ].filter(t => t.count > 0)
+
+  const thisWeekCount = weeklyData.reduce((acc, curr) => acc + curr.count, 0)
+
   // Dynamically update report count in stats
-  const stats = dashboardStats.map(s =>
-    s.label === 'Reports' ? { ...s, value: String(recentSessions.length) } : s
-  )
+  const stats = dashboardStats.map(s => {
+    if (s.label === 'Reports') return { ...s, value: String(allSessions.length) }
+    if (s.label === 'Consultations') return { ...s, value: String(thisWeekCount), label: 'This Week' }
+    return s
+  })
 
   return (
     <div className={layout.content.maxWidth + " mx-auto"}>
@@ -137,6 +165,67 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Analytics Widget section */}
+      {!loading && allSessions.length > 0 && (
+        <div className="mb-10 px-1">
+          <h2 className="text-sm font-semibold tracking-widest text-gray-500 uppercase mb-4">Activity Overview</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            {/* Weekly Chart */}
+            <div className="md:col-span-2 bg-white dark:bg-[#111111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-6 flex items-center gap-2">
+                <Activity className="w-4 h-4 text-blue-500" />
+                Consultations (Last 7 Days)
+              </h3>
+              
+              <div className="h-40 flex items-end justify-between gap-2 mt-4">
+                {weeklyData.map((data, i) => (
+                  <div key={i} className="flex flex-col items-center flex-1 group">
+                    <div className="relative w-full flex justify-center h-full items-end pb-2">
+                      <div 
+                        className="w-full max-w-[40px] bg-blue-100 dark:bg-blue-500/20 rounded-t-md relative overflow-hidden group-hover:bg-blue-200 dark:group-hover:bg-blue-500/30 transition-colors"
+                        style={{ height: `${(data.count / maxCount) * 100}%`, minHeight: data.count > 0 ? '4px' : '0' }}
+                      >
+                        <div className="absolute bottom-0 w-full h-1 bg-blue-500 rounded-t-md opacity-20" />
+                      </div>
+                      {/* Tooltip */}
+                      {data.count > 0 && (
+                        <div className="absolute -top-8 bg-gray-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                          {data.count}
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-medium text-gray-400 mt-2 uppercase">{data.day}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Distribution Legend */}
+            <div className="bg-white dark:bg-[#111111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-center">
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-6 flex items-center gap-2">
+                <PieChartIcon className="w-4 h-4 text-purple-500" />
+                Distribution
+              </h3>
+              <div className="space-y-4">
+                {typeDistribution.length > 0 ? typeDistribution.map(type => (
+                  <div key={type.type} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${type.color.split(' ')[0]}`} />
+                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{type.type}</span>
+                    </div>
+                    <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{type.count}</span>
+                  </div>
+                )) : (
+                  <p className="text-sm text-gray-400 text-center py-4">No data yet</p>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* Diagnostic Modules */}
       <div className="mb-12">

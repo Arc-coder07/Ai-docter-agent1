@@ -553,8 +553,20 @@ async def doctor_register(
         is_available=True,
     )
     db.add(doctor)
+
+    # Also set role on the User record
+    user = db.exec(select(User).where(User.clerk_id == clerk_user_id)).first()
+    if user:
+        user.role = "doctor"
+        user.name = request.name
+        db.add(user)
+
     db.commit()
     db.refresh(doctor)
+
+    # Set role in Clerk metadata
+    from app.api.v1.endpoints.onboarding import set_clerk_role
+    await set_clerk_role(clerk_user_id, "doctor")
 
     return {
         "message": "Doctor profile created successfully",

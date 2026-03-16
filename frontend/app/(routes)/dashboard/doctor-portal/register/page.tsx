@@ -143,9 +143,10 @@ export default function DoctorRegistration() {
             }
 
             toast.success('Doctor profile created successfully!', {
-                description: 'You can now manage appointments from the Doctor Portal.',
+                description: 'Welcome to the Doctor Portal!',
             })
-            router.push('/dashboard/doctor-portal')
+            // Force full page reload to refresh Clerk session with new role
+            window.location.href = '/dashboard/doctor-portal'
         } catch (err: any) {
             const detail = err?.response?.data?.detail
             toast.error(detail || 'Registration failed. Please try again.')

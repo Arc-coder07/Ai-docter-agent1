@@ -1,6 +1,7 @@
 import os
 import re
 import logging
+import threading
 from uuid import uuid4
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
@@ -10,6 +11,18 @@ from langchain.storage import InMemoryStore, LocalFileStore
 from langchain_qdrant import FastEmbedSparse, QdrantVectorStore, RetrievalMode
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.models import Distance, SparseVectorParams, VectorParams, OptimizersConfigDiff
+
+# Module-level singleton for QdrantClient to prevent concurrent access locks
+_qdrant_clients: Dict[str, QdrantClient] = {}
+_qdrant_lock = threading.Lock()
+
+def _get_qdrant_client(path: str) -> QdrantClient:
+    """Get or create a singleton QdrantClient for the given path."""
+    if path not in _qdrant_clients:
+        with _qdrant_lock:
+            if path not in _qdrant_clients:
+                _qdrant_clients[path] = QdrantClient(path=path)
+    return _qdrant_clients[path]
 
 class VectorStore:
     """
@@ -26,9 +39,8 @@ class VectorStore:
         self.vectorstore_local_path = config.rag.vector_local_path
         self.docstore_local_path = config.rag.doc_local_path
 
-        # Use the singleton client instead of creating a new one
-        # self.client = QdrantClientManager.get_client(config)
-        self.client = QdrantClient(path=self.vectorstore_local_path)
+        # Use singleton client to prevent concurrent access locks
+        self.client = _get_qdrant_client(self.vectorstore_local_path)
 
     def _does_collection_exist(self) -> bool:
         """Check if the collection already exists in Qdrant."""

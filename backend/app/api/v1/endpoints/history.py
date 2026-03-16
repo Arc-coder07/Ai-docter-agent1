@@ -192,12 +192,18 @@ async def generate_session_summary(
         for msg in messages
     ])
     
-    # Generate summary using Groq (via config)
+    # Generate summary using Gemini Flash
     try:
-        from app.agents.config import Config
-        config = Config()
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        import os
         
-        summary_prompt = f"""Analyze this medical consultation and provide a structured summary report.
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            api_key=os.getenv("GOOGLE_API_KEY"),
+            temperature=0.3
+        )
+        
+        summary_prompt = f"""Analyze this medical consultation and provide a structured clinical summary.
 
 **Conversation:**
 {conversation_text}
@@ -211,11 +217,12 @@ async def generate_session_summary(
 
 Format your response using markdown with clear headers."""
 
-        response = config.rag.summarizer_model.invoke(summary_prompt)
-        summary_text = response.content if hasattr(response, 'content') else str(response)
+        response = llm.invoke(summary_prompt)
+        summary_text = response.content
         
         # Update session with summary
         chat_session.summary = summary_text
+        db.add(chat_session)
         db.commit()
         
         return {

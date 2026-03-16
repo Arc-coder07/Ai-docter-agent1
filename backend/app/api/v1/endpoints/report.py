@@ -10,16 +10,16 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from sqlmodel import Session, select
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends  # pyre-ignore[21]
+from fastapi.responses import JSONResponse  # pyre-ignore[21]
+from pydantic import BaseModel  # pyre-ignore[21]
+from sqlmodel import Session, select  # pyre-ignore[21]
 
-from app.core.auth import get_current_user
-from app.db.engine import get_session
-from app.models import User, HealthReport, HealthReportMessage
-from app.agents.report_analysis import AnalysisAgent, ReportChatAgent
-from app.agents.report_analysis.pdf_utils import extract_text_from_pdf
+from app.core.auth import get_current_user  # pyre-ignore[21]
+from app.db.engine import get_session  # pyre-ignore[21]
+from app.models import User, HealthReport, HealthReportMessage  # pyre-ignore[21]
+from app.agents.report_analysis import AnalysisAgent, ReportChatAgent  # pyre-ignore[21]
+from app.agents.report_analysis.pdf_utils import extract_text_from_pdf  # pyre-ignore[21]
 
 router = APIRouter()
 

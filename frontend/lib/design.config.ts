@@ -65,6 +65,12 @@ export const colors = {
         text: "text-amber-500",
         shadow: "shadow-amber-500/20",
     },
+    brainTumorAnalysis: {
+        gradient: "from-[##667eea] to-[#764ba2]",
+        bg: "bg-[#667eea]/10",
+        text: "text-[#667eea]",
+        shadow: "shadow-[#667eea]/20",
+    },
     bookDoctor: {
         gradient: "from-teal-500 to-emerald-600",
         bg: "bg-teal-500/10",
@@ -82,6 +88,24 @@ export const colors = {
         bg: "bg-emerald-500/10",
         text: "text-emerald-500",
         shadow: "shadow-emerald-500/20",
+    },
+    healthProfile: {
+        gradient: "from-cyan-500 to-teal-600",
+        bg: "bg-cyan-500/10",
+        text: "text-cyan-500",
+        shadow: "shadow-cyan-500/20",
+    },
+    symptomChecker: {
+        gradient: "from-orange-500 to-red-600",
+        bg: "bg-orange-500/10",
+        text: "text-orange-500",
+        shadow: "shadow-orange-500/20",
+    },
+    medications: {
+        gradient: "from-green-500 to-emerald-600",
+        bg: "bg-green-500/10",
+        text: "text-green-500",
+        shadow: "shadow-green-500/20",
     },
     // Orb animation colors (voice consultation live session)
     orb: {
@@ -123,18 +147,37 @@ export type NavItem = {
 }
 
 export const sidebarConfig = {
-    navItems: [
+    // Shown to patients (default)
+    patientNavItems: [
         { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard", colorKey: "primary" as const },
+        { label: "Voice Consultation", href: "/dashboard/consultation", icon: "Mic", colorKey: "voiceConsultation" as const },
+        { label: "Medical Assistant", href: "/dashboard/assistant", icon: "Bot", colorKey: "medicalAssistant" as const },
+        { label: "Symptom Checker", href: "/dashboard/symptom-checker", icon: "HeartPulse", colorKey: "symptomChecker" as const },
+        { label: "Report Analysis", href: "/dashboard/report_analysis", icon: "FileText", colorKey: "reportAnalysis" as const },
+        { label: "X-Ray Analysis", href: "/dashboard/xray_analysis", icon: "Activity", colorKey: "xrayAnalysis" as const },
+        { label: "Brain Tumor CDSS", href: "/dashboard/brain-tumor-analysis", icon: "Brain", colorKey: "brainTumorAnalysis" as const },
+        { label: "Book a Doctor", href: "/dashboard/consultation_booking", icon: "Calendar", colorKey: "bookDoctor" as const },
+        { label: "Health Profile", href: "/dashboard/health-profile", icon: "UserRound", colorKey: "healthProfile" as const },
+        { label: "Medication Manager", href: "/dashboard/medications", icon: "Pill", colorKey: "medications" as const },
+        { label: "History", href: "/dashboard/history", icon: "History", colorKey: "history" as const },
+    ],
+    // Shown to doctors
+    doctorNavItems: [
+        { label: "Doctor Dashboard", href: "/dashboard/doctor-portal", icon: "Stethoscope", colorKey: "doctorPortal" as const },
+        { label: "My Appointments", href: "/dashboard/doctor-portal", icon: "Calendar", colorKey: "bookDoctor" as const },
+        { label: "Book a Doctor", href: "/dashboard/consultation_booking", icon: "Calendar", colorKey: "bookDoctor" as const },
         { label: "Voice Consultation", href: "/dashboard/consultation", icon: "Mic", colorKey: "voiceConsultation" as const },
         { label: "Medical Assistant", href: "/dashboard/assistant", icon: "Bot", colorKey: "medicalAssistant" as const },
         { label: "Report Analysis", href: "/dashboard/report_analysis", icon: "FileText", colorKey: "reportAnalysis" as const },
         { label: "X-Ray Analysis", href: "/dashboard/xray_analysis", icon: "Activity", colorKey: "xrayAnalysis" as const },
-        { label: "Book a Doctor", href: "/dashboard/consultation_booking", icon: "Calendar", colorKey: "bookDoctor" as const },
+        { label: "Brain Tumor CDSS", href: "/dashboard/brain-tumor-analysis", icon: "Brain", colorKey: "brainTumorAnalysis" as const },
+        { label: "Medication Manager", href: "/dashboard/medications", icon: "Pill", colorKey: "medications" as const },
         { label: "History", href: "/dashboard/history", icon: "History", colorKey: "history" as const },
-        { label: "Doctor Portal", href: "/dashboard/doctor-portal", icon: "Stethoscope", colorKey: "doctorPortal" as const },
     ],
+    // Keep backward-compatible alias
+    get navItems() { return this.patientNavItems },
     bottomItems: [
-        { label: "Help & Support", href: "#", icon: "HelpCircle" },
+        { label: "Help \u0026 Support", href: "#", icon: "HelpCircle" },
         { label: "Settings", href: "#", icon: "Settings" },
     ],
 }
@@ -171,6 +214,13 @@ export const dashboardFeatures = [
         colorKey: "xrayAnalysis" as const,
     },
     {
+        title: "Brain Tumor CDSS",
+        description: "Advanced ensemble Brain MRI analysis with 4-level XAI and reliability metrics",
+        icon: "Brain",
+        href: "/dashboard/brain-tumor-analysis",
+        colorKey: "brainTumorAnalysis" as const,
+    },
+    {
         title: "Book a Doctor",
         description: "Schedule and join video consultations with healthcare specialists",
         icon: "Calendar",
@@ -184,11 +234,32 @@ export const dashboardFeatures = [
         href: "/dashboard/history",
         colorKey: "history" as const,
     },
+    {
+        title: "Symptom Checker",
+        description: "Describe your symptoms and get an AI-powered preliminary assessment",
+        icon: "HeartPulse",
+        href: "/dashboard/symptom-checker",
+        colorKey: "symptomChecker" as const,
+    },
+    {
+        title: "Medication Manager",
+        description: "Search drugs, track medications, set reminders, and manage your prescriptions",
+        icon: "Pill",
+        href: "/dashboard/medications",
+        colorKey: "medications" as const,
+    },
+    {
+        title: "Health Profile",
+        description: "View and manage your health data, BMI, allergies, and medications",
+        icon: "UserRound",
+        href: "/dashboard/health-profile",
+        colorKey: "healthProfile" as const,
+    },
 ]
 
 // ─── STATS (Dashboard banner) ──────────────────────────────
 export const dashboardStats = [
-    { label: "AI Agents", value: "6+", icon: "Bot" },
+    { label: "AI Agents", value: "8+", icon: "Bot" },
     { label: "Specialties", value: "10", icon: "Sparkles" },
     { label: "Reports", value: "0", icon: "FileText" }, // Updated dynamically
     { label: "Uptime", value: "99%", icon: "TrendingUp" },

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.api.v1.endpoints import chat, history, users, assistant, report, xray, consultation
+from app.api.v1.endpoints import chat, history, users, assistant, report, xray, consultation, onboarding, brain_tumor
 import os
 
 app = FastAPI(title="AI Doctor Agent API")
@@ -37,7 +37,9 @@ app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
 app.include_router(assistant.router, prefix="/api/v1/assistant", tags=["assistant"])
 app.include_router(report.router, prefix="/api/v1/report", tags=["report"])
 app.include_router(xray.router, prefix="/api/v1/xray", tags=["xray"])
+app.include_router(brain_tumor.router, prefix="/api/v1/brain_tumor", tags=["brain_tumor"])
 app.include_router(consultation.router, prefix="/api/v1/consultation", tags=["consultation"])
+app.include_router(onboarding.router, prefix="/api/v1", tags=["onboarding"])
 
 @app.get("/")
 def read_root():

@@ -1,5 +1,5 @@
-from sqlmodel import create_engine, SQLModel, Session
-from app.core.config import get_settings
+from sqlmodel import create_engine, SQLModel, Session  # pyre-ignore[21]
+from app.core.config import get_settings  # pyre-ignore[21]
 
 settings = get_settings()
 

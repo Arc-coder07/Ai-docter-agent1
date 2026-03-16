@@ -30,6 +30,7 @@ class ChatMessage(SQLModel, table=True):
     role: str  # "user" or "assistant"
     content: str
     image_url: Optional[str] = None  # New: for image messages
+    agent: Optional[str] = None  # Which agent handled this message (e.g., 'BRAIN_TUMOR_AGENT')
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     session: ChatSession = Relationship(back_populates="messages")

@@ -2,7 +2,7 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { UserButton } from '@clerk/nextjs'
+import { UserButton, useUser } from '@clerk/nextjs'
 import { branding, colors, sidebarConfig, layout } from '@/lib/design.config'
 import {
     LayoutDashboard,
@@ -16,18 +16,27 @@ import {
     ChevronRight,
     Stethoscope,
     Settings,
-    HelpCircle
+    HelpCircle,
+    HeartPulse,
+    UserRound,
+    Pill,
+    Brain
 } from 'lucide-react'
 
 // Map icon name strings to actual icon components
 const iconMap: Record<string, React.ComponentType<any>> = {
     LayoutDashboard, Mic, Bot, FileText, Activity, Calendar, History,
-    Settings, HelpCircle, Stethoscope,
+    Settings, HelpCircle, Stethoscope, HeartPulse, UserRound, Pill, Brain,
 }
 
 export default function Sidebar() {
     const pathname = usePathname()
     const [collapsed, setCollapsed] = useState(false)
+    const { user } = useUser()
+
+    // Get role from Clerk publicMetadata
+    const role = (user?.publicMetadata as any)?.role || 'patient'
+    const navItems = role === 'doctor' ? sidebarConfig.doctorNavItems : sidebarConfig.patientNavItems
 
     const isActive = (href: string) => {
         if (href === '/dashboard') return pathname === '/dashboard'
@@ -50,15 +59,31 @@ export default function Sidebar() {
                 )}
             </Link>
 
-            {/* Navigation (Triage Index) */}
+            {/* Role Badge */}
+            {!collapsed && (
+                <div className="px-5 py-3 border-b border-gray-100/50 dark:border-white/5">
+                    <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold tracking-widest uppercase ${role === 'doctor'
+                        ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20'
+                        : 'bg-teal-50 dark:bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-100 dark:border-teal-500/20'
+                        }`}>
+                        {role === 'doctor' ? (
+                            <><Stethoscope className="w-3 h-3" /> Doctor</>
+                        ) : (
+                            <><Activity className="w-3 h-3" /> Patient</>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Navigation */}
             <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto no-scrollbar">
-                {sidebarConfig.navItems.map((item) => {
+                {navItems.map((item, index) => {
                     const active = isActive(item.href)
                     const Icon = iconMap[item.icon] || LayoutDashboard
 
                     return (
                         <Link
-                            key={item.href}
+                            key={`${item.href}-${index}`}
                             href={item.href}
                             className={`group flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all duration-200 ${active
                                 ? 'bg-gray-100/80 dark:bg-white/10 text-gray-900 dark:text-white'

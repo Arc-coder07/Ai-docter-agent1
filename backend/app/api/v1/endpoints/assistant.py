@@ -2,6 +2,7 @@
 Multi-Agent Medical Assistant API Endpoints
 """
 import os
+import io
 import uuid
 import logging
 import traceback
@@ -29,6 +30,29 @@ router = APIRouter()
 
 # Load configuration
 config = Config()
+
+
+def get_patient_context(user) -> str:
+    """Build a patient health context string from user profile for AI personalization."""
+    parts = []
+    if user.name:
+        parts.append(f"Name: {user.name}")
+    if user.gender:
+        parts.append(f"Gender: {user.gender}")
+    if user.date_of_birth:
+        parts.append(f"Date of Birth: {user.date_of_birth}")
+    if user.blood_group:
+        parts.append(f"Blood Group: {user.blood_group}")
+    if user.height_cm and user.weight_kg:
+        bmi = round(user.weight_kg / ((user.height_cm / 100) ** 2), 1)
+        parts.append(f"Height: {user.height_cm}cm, Weight: {user.weight_kg}kg, BMI: {bmi}")
+    if user.allergies:
+        parts.append(f"Known Allergies: {user.allergies}")
+    if user.chronic_conditions:
+        parts.append(f"Chronic Conditions: {user.chronic_conditions}")
+    if user.current_medications:
+        parts.append(f"Current Medications: {user.current_medications}")
+    return "\n".join(parts) if parts else ""
 
 # Set up directories
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -107,8 +131,13 @@ async def assistant_chat(
         db.add(user_message)
         db.commit()
         
-        # Process through multi-agent system
-        response_data = process_query(request.message)
+        # Process through multi-agent system with patient context
+        patient_context = get_patient_context(user)
+        response_data = process_query(
+            request.message,
+            user_id=clerk_user_id,
+            patient_context=patient_context
+        )
         response_text = response_data['messages'][-1].content
         agent_name = response_data.get("agent_name", "UNKNOWN")
         
@@ -116,7 +145,8 @@ async def assistant_chat(
         assistant_message = ChatMessage(
             session_id=session.id,
             role="assistant",
-            content=response_text
+            content=response_text,
+            agent=agent_name
         )
         db.add(assistant_message)
         
@@ -219,7 +249,12 @@ async def upload_and_analyze(
         
         # Process through multi-agent system with image
         query = {"text": text, "image": file_path}
-        response_data = process_query(query)
+        patient_context = get_patient_context(user)
+        response_data = process_query(
+            query,
+            user_id=clerk_user_id,
+            patient_context=patient_context
+        )
         response_text = response_data['messages'][-1].content
         agent_name = response_data.get("agent_name", "UNKNOWN")
         
@@ -247,7 +282,8 @@ async def upload_and_analyze(
         assistant_message = ChatMessage(
             session_id=session.id,
             role="assistant",
-            content=response_text
+            content=response_text,
+            agent=agent_name
         )
         db.add(assistant_message)
         
@@ -324,7 +360,12 @@ async def validate_output(
             validation_query += f" Comments: {request.comments}"
         
         # Process validation
-        response_data = process_query(validation_query)
+        patient_context = get_patient_context(user)
+        response_data = process_query(
+            validation_query,
+            user_id=clerk_user_id,
+            patient_context=patient_context
+        )
         response_text = response_data['messages'][-1].content
         
         # Save validation message
@@ -339,7 +380,8 @@ async def validate_output(
         assistant_message = ChatMessage(
             session_id=session.id,
             role="assistant",
-            content=response_text
+            content=response_text,
+            agent="HUMAN_VALIDATED"
         )
         db.add(assistant_message)
         db.commit()
@@ -361,6 +403,83 @@ async def validate_output(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/sessions/{session_id}/download-report")
+async def download_diagnosis_report(
+    session_id: str,
+    db: Session = Depends(get_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Generate and download a PDF diagnosis report for an image analysis session.
+    """
+    from app.agents.report_generator.diagnosis_report import (
+        build_report_from_user_and_session,
+        generate_diagnosis_pdf,
+    )
+    from fastapi.responses import StreamingResponse
+
+    clerk_user_id = current_user.get("sub")
+    user = db.exec(select(User).where(User.clerk_id == clerk_user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    session = db.exec(
+        select(ChatSession).where(
+            ChatSession.id == uuid.UUID(session_id),
+            ChatSession.user_id == user.id
+        )
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Only allow report download for image analysis sessions
+    image_agents = ["BRAIN_TUMOR_AGENT", "CHEST_XRAY_AGENT", "SKIN_LESION_AGENT"]
+    if not any(agent in (session.agent_used or "") for agent in image_agents):
+        raise HTTPException(status_code=400, detail="Reports are only available for image analysis sessions")
+
+    # Get the analysis result from the session's assistant messages
+    messages = db.exec(
+        select(ChatMessage).where(
+            ChatMessage.session_id == session.id,
+            ChatMessage.role == "assistant"
+        ).order_by(ChatMessage.created_at)
+    ).all()
+
+    analysis_text = "\n".join(m.content for m in messages if m.content) if messages else "No analysis available."
+
+    # Get the uploaded image path from the medical report record
+    report_record = db.exec(
+        select(MedicalReport).where(
+            MedicalReport.session_id == session.id
+        )
+    ).first()
+    image_path = report_record.file_path if report_record else ""
+
+    # Check for heatmap (generated by X-ray agent)
+    heatmap_path = ""
+    if "CHEST_XRAY_AGENT" in (session.agent_used or "") and image_path:
+        # The xray_detector generates a heatmap in the same directory
+        possible_heatmap = os.path.join(os.path.dirname(image_path), "gradcam_heatmap.png")
+        if os.path.exists(possible_heatmap):
+            heatmap_path = possible_heatmap
+
+    # Build and generate
+    report = build_report_from_user_and_session(
+        user=user,
+        session=session,
+        analysis_result=analysis_text,
+        image_path=image_path,
+        heatmap_path=heatmap_path,
+    )
+    pdf_bytes = generate_diagnosis_pdf(report)
+
+    filename = f"MedSage_Report_{session_id[:8]}_{datetime.now().strftime('%Y%m%d')}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 @router.get("/sessions")
 async def get_assistant_sessions(
@@ -388,6 +507,7 @@ async def get_assistant_sessions(
             "id": str(s.id),
             "title": s.title,
             "agent_used": s.agent_used,
+            "summary": s.summary,
             "created_at": s.created_at.isoformat() if s.created_at else None
         }
         for s in sessions
@@ -430,7 +550,8 @@ async def get_session_messages(
             "id": str(session.id),
             "title": session.title,
             "agent_used": session.agent_used,
-            "conversation_type": session.conversation_type
+            "conversation_type": session.conversation_type,
+            "summary": session.summary
         },
         "messages": [
             {
@@ -438,11 +559,77 @@ async def get_session_messages(
                 "role": m.role,
                 "content": m.content,
                 "image_url": m.image_url,
+                "agent": m.agent,
                 "created_at": m.created_at.isoformat() if m.created_at else None
             }
             for m in messages
         ]
     }
+
+
+@router.post("/sessions/{session_id}/summarize")
+async def summarize_session(
+    session_id: str,
+    db: Session = Depends(get_session),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Generate an AI clinical summary for a chat session using Gemini Flash.
+    """
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    from langchain_core.messages import SystemMessage, HumanMessage
+    
+    clerk_user_id = current_user.get("sub")
+    user = db.exec(select(User).where(User.clerk_id == clerk_user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    session = db.exec(
+        select(ChatSession).where(
+            ChatSession.id == uuid.UUID(session_id),
+            ChatSession.user_id == user.id
+        )
+    ).first()
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    messages = db.exec(
+        select(ChatMessage).where(
+            ChatMessage.session_id == session.id
+        ).order_by(ChatMessage.created_at)
+    ).all()
+    
+    if not messages:
+        return {"summary": "No messages in session to summarize."}
+        
+    # Format messages
+    conversation = "\n".join([f"{m.role}: {m.content}" for m in messages if m.content])
+    
+    # Init Gemini
+    try:
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            api_key=os.getenv("GOOGLE_API_KEY"),
+            temperature=0.3
+        )
+        
+        prompt = [
+            SystemMessage(content="You are a medical scribe. Summarize the following medical consultation or assistant interaction. Keep it concise, highlighting the patient's main concern, any symptoms discussed, the AI's assessment/advice, and next steps. Do not use more than 3-4 sentences. Format as a clinical summary paragraph."),
+            HumanMessage(content=f"Conversation Transcript:\n{conversation}")
+        ]
+        
+        response = llm.invoke(prompt)
+        summary = response.content
+        
+        # Save to DB
+        session.summary = summary
+        db.add(session)
+        db.commit()
+        
+        return {"summary": summary}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate summary: {str(e)}")
 
 
 class SpeechRequest(BaseModel):
@@ -463,7 +650,7 @@ async def generate_speech(
         from fastapi.responses import StreamingResponse
         import io
         
-        client = ElevenLabs(api_key=config.speech.api_key)
+        client = ElevenLabs(api_key=config.speech.eleven_labs_api_key)
         
         audio = client.text_to_speech.convert(
             voice_id=request.voice_id,

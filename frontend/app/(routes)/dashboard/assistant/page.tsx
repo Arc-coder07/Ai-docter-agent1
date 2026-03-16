@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
@@ -19,7 +19,6 @@ import {
     PanelLeftOpen,
     Volume2,
     VolumeX,
-    Trash2,
     CheckCircle,
     XCircle,
     Paperclip,
@@ -30,6 +29,11 @@ import {
     Shield,
     Zap,
     Plus,
+    HeartPulse,
+    Pill,
+    Download,
+    History,
+    MessageSquare,
 } from 'lucide-react'
 import { colors, layout } from '@/lib/design.config'
 
@@ -44,6 +48,13 @@ type Message = {
     needs_validation?: boolean
 }
 
+type SessionSummary = {
+    id: string
+    title: string
+    agent_used?: string
+    created_at?: string
+}
+
 // Agent metadata for badges
 const AGENT_META: Record<string, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
     'CONVERSATION_AGENT': { label: 'Conversation', icon: <MessageCircle className="w-3 h-3" />, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-500/20' },
@@ -52,6 +63,8 @@ const AGENT_META: Record<string, { label: string; icon: React.ReactNode; color: 
     'BRAIN_TUMOR_AGENT': { label: 'Brain Tumor', icon: <Brain className="w-3 h-3" />, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-100 dark:bg-orange-500/20' },
     'CHEST_XRAY_AGENT': { label: 'Chest X-ray', icon: <Scan className="w-3 h-3" />, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-100 dark:bg-red-500/20' },
     'SKIN_LESION_AGENT': { label: 'Skin Lesion', icon: <Microscope className="w-3 h-3" />, color: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-100 dark:bg-pink-500/20' },
+    'SYMPTOM_CHECKER_AGENT': { label: 'Symptom Checker', icon: <HeartPulse className="w-3 h-3" />, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-100 dark:bg-orange-500/20' },
+    'DRUG_INTERACTION_AGENT': { label: 'Drug Interaction', icon: <Pill className="w-3 h-3" />, color: 'text-cyan-600 dark:text-cyan-400', bg: 'bg-cyan-100 dark:bg-cyan-500/20' },
     'HUMAN_VALIDATED': { label: 'Validated', icon: <CheckCircle className="w-3 h-3" />, color: 'text-green-700 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-500/20' },
     'System': { label: 'System', icon: <Bot className="w-3 h-3" />, color: 'text-gray-500 dark:text-gray-400', bg: 'bg-gray-100 dark:bg-gray-500/20' },
 }
@@ -74,6 +87,8 @@ const AGENT_LIST = [
     { name: 'Medical Conversation', icon: <MessageCircle className="w-4 h-4" />, desc: 'General health chat', colorClass: 'text-emerald-500' },
     { name: 'Medical RAG', icon: <BookOpen className="w-4 h-4" />, desc: 'Knowledge retrieval', colorClass: 'text-blue-500' },
     { name: 'Web Search', icon: <Search className="w-4 h-4" />, desc: 'Latest medical info', colorClass: 'text-violet-500' },
+    { name: 'Symptom Checker', icon: <HeartPulse className="w-4 h-4" />, desc: 'Symptom assessment', colorClass: 'text-orange-500' },
+    { name: 'Drug Interaction', icon: <Pill className="w-4 h-4" />, desc: 'Medication safety', colorClass: 'text-cyan-500' },
 ]
 
 const CV_AGENTS = [
@@ -110,6 +125,8 @@ export default function MedicalAssistantPage() {
     const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null)
     const [playingMessageId, setPlayingMessageId] = useState<string | null>(null)
     const [sidebarOpen, setSidebarOpen] = useState(true)
+    const [recentSessions, setRecentSessions] = useState<SessionSummary[]>([])
+    const [isLoadingSessions, setIsLoadingSessions] = useState(true)
 
     const fileInputRef = useRef<HTMLInputElement>(null)
     const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -190,12 +207,18 @@ export default function MedicalAssistantPage() {
     }
 
     const playTTS = async (text: string, messageId: string) => {
-        if (currentAudio) {
-            currentAudio.pause()
-            setCurrentAudio(null)
+        // If already playing, stop
+        if (currentAudio || playingMessageId) {
+            if (currentAudio) {
+                currentAudio.pause()
+                setCurrentAudio(null)
+            }
+            window.speechSynthesis?.cancel()
             setPlayingMessageId(null)
             return
         }
+
+        setPlayingMessageId(messageId)
 
         try {
             const headers = await getAuthHeaders()
@@ -213,10 +236,24 @@ export default function MedicalAssistantPage() {
             }
 
             setCurrentAudio(audio)
-            setPlayingMessageId(messageId)
             audio.play()
         } catch (err) {
-            console.error('TTS failed:', err)
+            console.warn('ElevenLabs TTS failed, falling back to browser speech:', err)
+            // Fallback to browser-native speech synthesis
+            if (window.speechSynthesis) {
+                const utterance = new SpeechSynthesisUtterance(text.slice(0, 3000))
+                utterance.rate = 1.0
+                utterance.pitch = 1.0
+                utterance.onend = () => {
+                    setPlayingMessageId(null)
+                }
+                utterance.onerror = () => {
+                    setPlayingMessageId(null)
+                }
+                window.speechSynthesis.speak(utterance)
+            } else {
+                setPlayingMessageId(null)
+            }
         }
     }
 
@@ -278,6 +315,9 @@ export default function MedicalAssistantPage() {
                 }
                 setMessages(prev => [...prev, imageMessage])
             }
+
+            // Refresh sidebar session list
+            refreshSessions()
         } catch (error: any) {
             console.error('Error:', error)
             const errorDetail = error.response?.data?.detail || 'An unexpected error occurred.'
@@ -317,7 +357,7 @@ export default function MedicalAssistantPage() {
         }
     }
 
-    const clearChat = () => {
+    const startNewChat = () => {
         setMessages([{
             id: '0',
             role: 'assistant',
@@ -326,6 +366,58 @@ export default function MedicalAssistantPage() {
         }])
         setSessionId(null)
         setPendingValidation(false)
+    }
+
+    const loadSession = useCallback(async (sid: string) => {
+        try {
+            const headers = await getAuthHeaders()
+            const res = await axios.get(`${API_URL}/api/v1/assistant/sessions/${sid}/messages`, { headers })
+            const data = res.data
+            setSessionId(sid)
+            const loaded: Message[] = data.messages.map((m: any) => ({
+                id: m.id,
+                role: m.role,
+                content: m.content,
+                image_url: m.image_url || undefined,
+                agent: m.agent || (m.role === 'assistant' ? data.session?.agent_used : undefined),
+            }))
+            if (loaded.length > 0) {
+                setMessages(loaded)
+            }
+            setPendingValidation(false)
+        } catch (err) {
+            console.error('Failed to load session:', err)
+        }
+    }, [getToken])
+
+    // Load recent sessions and latest conversation on mount
+    useEffect(() => {
+        const loadSessions = async () => {
+            try {
+                const headers = await getAuthHeaders()
+                const res = await axios.get(`${API_URL}/api/v1/assistant/sessions`, { headers })
+                const sessions: SessionSummary[] = res.data || []
+                setRecentSessions(sessions)
+                // Auto-load the most recent session if one exists
+                if (sessions.length > 0) {
+                    await loadSession(sessions[0].id)
+                }
+            } catch (err) {
+                console.error('Failed to load sessions:', err)
+            } finally {
+                setIsLoadingSessions(false)
+            }
+        }
+        loadSessions()
+    }, [loadSession])
+
+    // Refresh session list after sending a message
+    const refreshSessions = async () => {
+        try {
+            const headers = await getAuthHeaders()
+            const res = await axios.get(`${API_URL}/api/v1/assistant/sessions`, { headers })
+            setRecentSessions(res.data || [])
+        } catch {}
     }
 
     const removeMarkdown = (text: string) => {
@@ -413,17 +505,43 @@ export default function MedicalAssistantPage() {
                         </div>
                     </div>
 
-                    {/* Sidebar Footer */}
-                    <div className="px-4 py-3 border-t border-gray-100/50 dark:border-white/5 flex-shrink-0 space-y-2">
+                    {/* Sidebar Footer: New Chat + Recent Sessions */}
+                    <div className="px-4 py-3 border-t border-gray-100/50 dark:border-white/5 flex-shrink-0 space-y-3">
                         <button
-                            onClick={clearChat}
+                            onClick={startNewChat}
                             className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-medium
-                                text-red-500 hover:text-red-600 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20
-                                transition-all duration-200"
+                                text-purple-600 hover:text-purple-700 bg-purple-50 dark:bg-purple-500/10 hover:bg-purple-100 dark:hover:bg-purple-500/20
+                                transition-all duration-200 border border-purple-200 dark:border-purple-500/20"
                         >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            Clear Conversation
+                            <Plus className="w-3.5 h-3.5" />
+                            New Chat
                         </button>
+
+                        {/* Recent Sessions */}
+                        {recentSessions.length > 0 && (
+                            <div>
+                                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 px-1 flex items-center gap-1">
+                                    <History className="w-3 h-3" />
+                                    Recent Chats
+                                </h3>
+                                <div className="space-y-0.5 max-h-[140px] overflow-y-auto no-scrollbar">
+                                    {recentSessions.slice(0, 8).map((s) => (
+                                        <button
+                                            key={s.id}
+                                            onClick={() => loadSession(s.id)}
+                                            className={`w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-colors truncate ${
+                                                sessionId === s.id
+                                                    ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 font-medium'
+                                                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
+                                            }`}
+                                        >
+                                            <MessageSquare className="w-3 h-3 flex-shrink-0" />
+                                            <span className="truncate">{s.title || 'Untitled Chat'}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </aside>
@@ -452,8 +570,33 @@ export default function MedicalAssistantPage() {
                         </div>
                     </div>
                     <div className="flex items-center gap-1.5">
+                        {sessionId && messages.some(m => m.agent && m.agent.match(/BRAIN_TUMOR_AGENT|CHEST_XRAY_AGENT|SKIN_LESION_AGENT/)) && (
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        const headers = await getAuthHeaders()
+                                        const response = await axios.get(
+                                            `${API_URL}/api/v1/assistant/sessions/${sessionId}/download-report`,
+                                            { headers, responseType: 'blob' }
+                                        )
+                                        const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+                                        const link = document.createElement('a')
+                                        link.href = url
+                                        link.download = `MedSage_Report.pdf`
+                                        link.click()
+                                        window.URL.revokeObjectURL(url)
+                                    } catch (err) {
+                                        console.error('Download failed:', err)
+                                    }
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors mr-2 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20 dark:hover:bg-blue-500/20"
+                            >
+                                <Download className="w-3.5 h-3.5" />
+                                Download Report
+                            </button>
+                        )}
                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400">
-                            <Zap className="w-3 h-3" /> 6 Agents
+                            <Zap className="w-3 h-3" /> 8 Agents
                         </span>
                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400">
                             <Shield className="w-3 h-3" /> Guardrails
@@ -505,17 +648,19 @@ export default function MedicalAssistantPage() {
 
                                 {/* TTS Button */}
                                 {msg.role === 'assistant' && msg.agent !== 'System' && (
-                                    <button
-                                        onClick={() => playTTS(removeMarkdown(msg.content), msg.id)}
-                                        className={`mt-2 inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border transition-all duration-200
-                                            ${playingMessageId === msg.id
-                                                ? 'bg-purple-600 text-white border-purple-600 shadow-sm shadow-purple-500/20'
-                                                : 'border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10'
-                                            }`}
-                                    >
-                                        {playingMessageId === msg.id ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
-                                        {playingMessageId === msg.id ? 'Stop' : 'Listen'}
-                                    </button>
+                                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                        <button
+                                            onClick={() => playTTS(removeMarkdown(msg.content), msg.id)}
+                                            className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border transition-all duration-200
+                                                ${playingMessageId === msg.id
+                                                    ? 'bg-purple-600 text-white border-purple-600 shadow-sm shadow-purple-500/20'
+                                                    : 'border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10'
+                                                }`}
+                                        >
+                                            {playingMessageId === msg.id ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                                            {playingMessageId === msg.id ? 'Stop' : 'Listen'}
+                                        </button>
+                                    </div>
                                 )}
 
                                 {/* Human Validation */}

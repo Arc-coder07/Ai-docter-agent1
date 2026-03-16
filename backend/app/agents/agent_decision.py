@@ -6,13 +6,14 @@ It dynamically routes user queries to the appropriate agent based on content and
 """
 
 import json
+import threading
 from typing import Dict, List, Optional, Any, Literal, TypedDict, Union, Annotated
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from langgraph.graph import MessagesState, StateGraph, END
-import os, getpass
+import os
 from dotenv import load_dotenv
 from app.agents.rag_agent import MedicalRAG
 from app.agents.web_search_processor_agent import WebSearchProcessorAgent
@@ -31,11 +32,24 @@ load_dotenv()
 # Load configuration
 config = Config()
 
-# Initialize memory
+# Initialize shared memory saver (used by graph singleton)
 memory = MemorySaver()
 
-# Specify a thread
-thread_config = {"configurable": {"thread_id": "1"}}
+# ── Graph Singleton ────────────────────────────────────────────────────────────
+# The LangGraph agent graph is expensive to compile. Create it once at module
+# level and reuse across all requests. Thread-safe via a lock.
+_graph = None
+_graph_lock = threading.Lock()
+
+
+def get_agent_graph():
+    """Return the compiled agent graph, building it on first call (singleton)."""
+    global _graph
+    if _graph is None:
+        with _graph_lock:
+            if _graph is None:  # double-checked locking
+                _graph = create_agent_graph()
+    return _graph
 
 
 # Agent that takes the decision of routing the request further to correct task specific agent
@@ -43,7 +57,7 @@ class AgentConfig:
     """Configuration settings for the agent decision system."""
     
     # Decision model
-    DECISION_MODEL = "gpt-4o"  # or whichever model you prefer
+    DECISION_MODEL = "gpt-4o"
     
     # Vision model for image analysis
     VISION_MODEL = "gpt-4o"
@@ -57,25 +71,29 @@ class AgentConfig:
     is best suited to handle it based on the query content, presence of images, and conversation context.
 
     Available agents:
-    1. CONVERSATION_AGENT - For general chat, greetings, and non-medical questions.
-    2. RAG_AGENT - For specific medical knowledge questions that can be answered from established medical literature. Currently ingested medical knowledge involves 'introduction to brain tumor', 'deep learning techniques to diagnose and detect brain tumors', 'deep learning techniques to diagnose and detect covid / covid-19 from chest x-ray'.
+    1. CONVERSATION_AGENT - For general chat, greetings, non-medical questions, and medical questions not covered by other agents.
+    2. RAG_AGENT - For specific medical knowledge questions answerable from established medical literature. Covers: brain tumors, brain MRI, COVID-19 chest X-ray diagnostics.
     3. WEB_SEARCH_PROCESSOR_AGENT - For questions about recent medical developments, current outbreaks, or time-sensitive medical information.
     4. BRAIN_TUMOR_AGENT - For analysis of brain MRI images to detect and segment tumors.
-    5. CHEST_XRAY_AGENT - For analysis of chest X-ray images to detect abnormalities.
+    5. CHEST_XRAY_AGENT - For analysis of chest X-ray images to detect COVID-19 or abnormalities.
     6. SKIN_LESION_AGENT - For analysis of skin lesion images to classify them as benign or malignant.
+    7. SYMPTOM_CHECKER_AGENT - For structured symptom assessment when user describes symptoms (e.g., "I have chest pain", "my head hurts with fever", "I feel nauseous and dizzy"). Use whenever the user is describing symptoms they are experiencing.
+    8. DRUG_INTERACTION_AGENT - For questions about drug interactions, medication safety, or when the user mentions multiple drugs and asks if they are safe to combine.
 
     Make your decision based on these guidelines:
-    - If the user has not uploaded any image, always route to the conversation agent.
-    - If the user uploads a medical image, decide which medical vision agent is appropriate based on the image type and the user's query. If the image is uploaded without a query, always route to the correct medical vision agent based on the image type.
-    - If the user asks about recent medical developments or current health situations, use the web search pocessor agent.
-    - If the user asks specific medical knowledge questions, use the RAG agent.
-    - For general conversation, greetings, or non-medical questions, use the conversation agent. But if image is uploaded, always go to the medical vision agents first.
+    - If the user has not uploaded any image, never route to vision agents.
+    - If the user uploads a medical image, route to the correct medical vision agent based on image type.
+    - If the user describes symptoms they are experiencing → SYMPTOM_CHECKER_AGENT.
+    - If the user asks about drug interactions or medication combinations → DRUG_INTERACTION_AGENT.
+    - If the user asks about recent medical developments or current health situations → WEB_SEARCH_PROCESSOR_AGENT.
+    - If the user asks specific medical knowledge questions covered in the knowledge base → RAG_AGENT.
+    - For general conversation, greetings, or non-medical questions → CONVERSATION_AGENT.
 
     You must provide your answer in JSON format with the following structure:
     {{
     "agent": "AGENT_NAME",
     "reasoning": "Your step-by-step reasoning for selecting this agent",
-    "confidence": 0.95  // Value between 0.0 and 1.0 indicating your confidence in this decision
+    "confidence": 0.95
     }}
     """
 
@@ -84,7 +102,6 @@ class AgentConfig:
 
 class AgentState(MessagesState):
     """State maintained across the workflow."""
-    # messages: List[BaseMessage]  # Conversation history
     agent_name: Optional[str]  # Current active agent
     current_input: Optional[Union[str, Dict]]  # Input to be processed
     has_image: bool  # Whether the current input contains an image
@@ -94,6 +111,7 @@ class AgentState(MessagesState):
     retrieval_confidence: float  # Confidence in retrieval (for RAG agent)
     bypass_routing: bool  # Flag to bypass agent routing for guardrails
     insufficient_info: bool  # Flag indicating RAG response has insufficient information
+    patient_context: Optional[str]  # Patient health profile for personalized responses
 
 
 class AgentDecision(TypedDict):
@@ -189,6 +207,25 @@ def create_agent_graph():
         has_image = state["has_image"]
         image_type = state["image_type"]
         
+        # Direct routing for classified medical images (bypass LLM decision)
+        # This prevents the LLM from incorrectly routing image analysis requests
+        if has_image and image_type:
+            image_type_upper = image_type.upper()
+            image_route_map = {
+                "BRAIN MRI SCAN": "BRAIN_TUMOR_AGENT",
+                "BRAIN MRI": "BRAIN_TUMOR_AGENT",
+                "CHEST X-RAY": "CHEST_XRAY_AGENT",
+                "CHEST XRAY": "CHEST_XRAY_AGENT",
+                "SKIN LESION": "SKIN_LESION_AGENT",
+            }
+            for key, agent in image_route_map.items():
+                if key in image_type_upper:
+                    print(f"Direct image routing: {image_type} -> {agent}")
+                    return {
+                        "agent_state": {**state, "agent_name": agent},
+                        "next": agent
+                    }
+        
         # Prepare input for decision model
         input_text = ""
         if isinstance(current_input, str):
@@ -269,57 +306,39 @@ def create_agent_graph():
                 # print("######### DEBUG 2:", msg)
                 recent_context += f"Assistant: {msg.content}\n"
         
+        # Build patient context section
+        patient_section = ""
+        patient_ctx = state.get("patient_context", "")
+        if patient_ctx:
+            patient_section = f"\n\n### Patient Health Profile (use to personalize your response):\n{patient_ctx}"
+        
         # Combine everything for the decision input
         conversation_prompt = f"""User query: {input_text}
 
         Recent conversation context: {recent_context}
+{patient_section}
 
         You are an AI-powered Medical Conversation Assistant. Your goal is to facilitate smooth and informative conversations with users, handling both casual and medical-related queries. You must respond naturally while ensuring medical accuracy and clarity.
 
         ### Role & Capabilities
         - Engage in **general conversation** while maintaining professionalism.
         - Answer **medical questions** using verified knowledge.
-        - Route **complex queries** to RAG (retrieval-augmented generation) or web search if needed.
         - Handle **follow-up questions** while keeping track of conversation context.
+        - If the patient's health profile is available, personalize your advice (e.g., considering their allergies, chronic conditions, current medications).
         - Redirect **medical images** to the appropriate AI analysis agent.
 
         ### Guidelines for Responding:
-        1. **General Conversations:**
-        - If the user engages in casual talk (e.g., greetings, small talk), respond in a friendly, engaging manner.
-        - Keep responses **concise and engaging**, unless a detailed answer is needed.
-
-        2. **Medical Questions:**
-        - If you have **high confidence** in answering, provide a medically accurate response.
-        - Ensure responses are **clear, concise, and factual**.
-
-        3. **Follow-Up & Clarifications:**
-        - Maintain conversation history for better responses.
-        - If a query is unclear, ask **follow-up questions** before answering.
-
-        4. **Handling Medical Image Analysis:**
-        - Do **not** attempt to analyze images yourself.
-        - If user speaks about analyzing or processing or detecting or segmenting or classifying any disease from any image, ask the user to upload the image so that in the next turn it is routed to the appropriate medical vision agents.
-        - If an image was uploaded, it would have been routed to the medical computer vision agents. Read the history to know about the diagnosis results and continue conversation if user asks anything regarding the diagnosis.
-        - After processing, **help the user interpret the results**.
-
-        5. **Uncertainty & Ethical Considerations:**
-        - If unsure, **never assume** medical facts.
-        - Recommend consulting a **licensed healthcare professional** for serious medical concerns.
-        - Avoid providing **medical diagnoses** or **prescriptions**—stick to general knowledge.
+        1. **General Conversations:** Respond in a friendly, engaging manner. Keep responses concise.
+        2. **Medical Questions:** Provide medically accurate, clear, and factual responses. If the patient has known conditions, factor those in.
+        3. **Follow-Up & Clarifications:** Maintain conversation history. Ask follow-up questions if unclear.
+        4. **Handling Medical Image Analysis:** Do not analyze images yourself. Ask the user to upload the image.
+        5. **Uncertainty & Ethical Considerations:** Never assume. Recommend consulting a licensed healthcare professional for serious concerns. Avoid providing diagnoses or prescriptions.
 
         ### Response Format:
-        - Maintain a **conversational yet professional tone**.
-        - Use **bullet points or numbered lists** for clarity when needed.
-        - If pulling from external sources (RAG/Web Search), mention **where the information is from** (e.g., "According to Mayo Clinic...").
-        - If a user asks for a diagnosis, remind them to **seek medical consultation**.
-
-        ### Example User Queries & Responses:
-
-        **User:** "Hey, how's your day going?"
-        **You:** "I'm here and ready to help! How can I assist you today?"
-
-        **User:** "I have a headache and fever. What should I do?"
-        **You:** "I'm not a doctor, but headaches and fever can have various causes, from infections to dehydration. If your symptoms persist, you should see a medical professional."
+        - Conversational yet professional tone.
+        - Use bullet points or numbered lists for clarity.
+        - If a user asks for a diagnosis, remind them to seek medical consultation.
+        - Always add a brief disclaimer for medical advice: "*This is AI-generated guidance, not a substitute for professional medical advice.*"
 
         Conversational LLM Response:"""
 
@@ -369,15 +388,17 @@ def create_agent_graph():
         response_content = response["response"]
         
         # Extract the content properly based on type
-        if isinstance(response_content, dict) and hasattr(response_content, 'content'):
+        if hasattr(response_content, 'content'):
             # If it's an AIMessage or similar object with a content attribute
             response_text = response_content.content
+        elif isinstance(response_content, dict) and "content" in response_content:
+            response_text = response_content["content"]
         else:
             # If it's already a string
-            response_text = response_content
+            response_text = str(response_content)
             
         print(f"Response text type: {type(response_text)}")
-        print(f"Response text preview: {response_text[:100]}...")
+        print(f"Response text preview: {response_text[:100]}...")  # pyre-ignore
         
         if isinstance(response_text, str) and (
             "I don't have enough information to answer this question based on the provided context" in response_text or 
@@ -450,7 +471,7 @@ def create_agent_graph():
         }
 
     # Define Routing Logic
-    def confidence_based_routing(state: AgentState) -> Dict[str, str]:
+    def confidence_based_routing(state: AgentState) -> str:
         """Route based on RAG confidence score and response content."""
         # Debug prints
         print(f"Routing check - Retrieval confidence: {state.get('retrieval_confidence', 0.0)}")
@@ -567,6 +588,20 @@ def create_agent_graph():
         """Apply output guardrails to the generated response."""
         output = state["output"]
         current_input = state["current_input"]
+        agent_name = state.get("agent_name", "")
+
+        # Skip output guardrails for vision agents — their responses come from
+        # specialized ML models with built-in disclaimers and confidence scores.
+        # The text-only guardrail LLM has no image context and incorrectly
+        # rewrites valid analysis results into generic "I can't view images" text.
+        vision_agents = ["BRAIN_TUMOR_AGENT", "CHEST_XRAY_AGENT", "SKIN_LESION_AGENT"]
+        if any(va in (agent_name or "") for va in vision_agents):
+            sanitized_message = output if isinstance(output, AIMessage) else AIMessage(content=str(output))
+            return {
+                **state,
+                "messages": sanitized_message,
+                "output": sanitized_message
+            }
 
         # Check if output is valid
         if not output or not isinstance(output, (str, AIMessage)):
@@ -623,7 +658,103 @@ def create_agent_graph():
         }
 
     
-    # Create the workflow graph
+    # ── New Agents ──────────────────────────────────────────────────────────────
+
+    def run_symptom_checker_agent(state: AgentState) -> AgentState:
+        """Structured symptom assessment agent."""
+        print(f"Selected agent: SYMPTOM_CHECKER_AGENT")
+
+        current_input = state["current_input"]
+        input_text = current_input if isinstance(current_input, str) else current_input.get("text", "")
+
+        patient_ctx = state.get("patient_context", "")
+        patient_section = f"\nPatient health profile:\n{patient_ctx}" if patient_ctx else ""
+
+        symptom_prompt = f"""You are a Medical Symptom Assessment Agent. Analyze the user's reported symptoms and provide a structured clinical assessment.
+
+User's message: {input_text}
+{patient_section}
+
+### Your task:
+1. **Identify** all symptoms mentioned by the user.
+2. **Assess** severity (mild / moderate / severe) based on descriptions.
+3. **List** the top 3–5 possible conditions (differential diagnosis) ranked by likelihood.
+4. **Recommend** next steps (self-care, doctor visit, or emergency).
+
+### Output format:
+**Symptoms Identified:**
+- [Symptom 1] — severity
+- [Symptom 2] — severity
+
+**Possible Conditions (ranked by likelihood):**
+1. [Condition] — [confidence %] — brief explanation
+2. …
+
+**Recommended Next Steps:**
+- [action]
+
+**Urgency Level:** [Low / Medium / High / Emergency]
+
+⚠️ *This is an AI-generated preliminary assessment, NOT a medical diagnosis. Please consult a qualified healthcare professional.*
+"""
+
+        response = config.conversation.llm.invoke(symptom_prompt)
+
+        return {
+            **state,
+            "output": response,
+            "needs_human_validation": True,
+            "agent_name": "SYMPTOM_CHECKER_AGENT"
+        }
+
+    def run_drug_interaction_agent(state: AgentState) -> AgentState:
+        """Drug interaction checking agent."""
+        print(f"Selected agent: DRUG_INTERACTION_AGENT")
+
+        current_input = state["current_input"]
+        input_text = current_input if isinstance(current_input, str) else current_input.get("text", "")
+
+        patient_ctx = state.get("patient_context", "")
+        patient_section = f"\nPatient's current medications from health profile:\n{patient_ctx}" if patient_ctx else ""
+
+        drug_prompt = f"""You are a Drug Interaction Checker Agent. Analyze the medications or drugs mentioned by the user and check for potential interactions.
+
+User's question: {input_text}
+{patient_section}
+
+### Your task:
+1. **Identify** all drugs/medications mentioned in the user's query AND in the patient's health profile (if available).
+2. **Check** for known interactions between any combination of these drugs.
+3. **Classify** each interaction by severity: Mild / Moderate / Severe / Contraindicated.
+4. **Explain** what the interaction does and its clinical significance.
+5. **Recommend** actions (monitoring, dose adjustment, alternative, or consult a doctor).
+
+### Output format:
+**Medications Identified:**
+- [Drug 1] (from: user query / health profile)
+- [Drug 2]
+
+**Interaction Analysis:**
+| Drug Pair | Severity | Effect | Recommendation |
+|-----------|----------|--------|----------------|
+| Drug A + Drug B | Moderate | [effect] | [action] |
+
+**Summary & Advice:**
+- [overall recommendation]
+
+⚠️ *This is an AI-generated analysis for informational purposes only. Always verify drug interactions with a pharmacist or physician before making medication changes.*
+"""
+
+        response = config.conversation.llm.invoke(drug_prompt)
+
+        return {
+            **state,
+            "output": response,
+            "needs_human_validation": True,
+            "agent_name": "DRUG_INTERACTION_AGENT"
+        }
+
+    # ── Create the workflow graph ─────────────────────────────────────────────
     workflow = StateGraph(AgentState)
     
     # Add nodes for each step
@@ -635,14 +766,14 @@ def create_agent_graph():
     workflow.add_node("BRAIN_TUMOR_AGENT", run_brain_tumor_agent)
     workflow.add_node("CHEST_XRAY_AGENT", run_chest_xray_agent)
     workflow.add_node("SKIN_LESION_AGENT", run_skin_lesion_agent)
+    workflow.add_node("SYMPTOM_CHECKER_AGENT", run_symptom_checker_agent)
+    workflow.add_node("DRUG_INTERACTION_AGENT", run_drug_interaction_agent)
     workflow.add_node("check_validation", handle_human_validation)
     workflow.add_node("human_validation", perform_human_validation)
     workflow.add_node("apply_guardrails", apply_output_guardrails)
     
     # Define the edges (workflow connections)
     workflow.set_entry_point("analyze_input")
-    # workflow.add_edge("analyze_input", "route_to_agent")
-    # Add conditional routing for guardrails bypass
     workflow.add_conditional_edges(
         "analyze_input",
         check_if_bypassing,
@@ -663,18 +794,21 @@ def create_agent_graph():
             "BRAIN_TUMOR_AGENT": "BRAIN_TUMOR_AGENT",
             "CHEST_XRAY_AGENT": "CHEST_XRAY_AGENT",
             "SKIN_LESION_AGENT": "SKIN_LESION_AGENT",
-            "needs_validation": "RAG_AGENT"  # Default to RAG if confidence is low
+            "SYMPTOM_CHECKER_AGENT": "SYMPTOM_CHECKER_AGENT",
+            "DRUG_INTERACTION_AGENT": "DRUG_INTERACTION_AGENT",
+            "needs_validation": "RAG_AGENT"
         }
     )
     
     # Connect agent outputs to validation check
     workflow.add_edge("CONVERSATION_AGENT", "check_validation")
-    # workflow.add_edge("RAG_AGENT", "check_validation")
     workflow.add_edge("WEB_SEARCH_PROCESSOR_AGENT", "check_validation")
     workflow.add_conditional_edges("RAG_AGENT", confidence_based_routing)
     workflow.add_edge("BRAIN_TUMOR_AGENT", "check_validation")
     workflow.add_edge("CHEST_XRAY_AGENT", "check_validation")
     workflow.add_edge("SKIN_LESION_AGENT", "check_validation")
+    workflow.add_edge("SYMPTOM_CHECKER_AGENT", "check_validation")
+    workflow.add_edge("DRUG_INTERACTION_AGENT", "check_validation")
 
     workflow.add_edge("human_validation", "apply_guardrails")
     workflow.add_edge("apply_guardrails", END)
@@ -684,17 +818,15 @@ def create_agent_graph():
         lambda x: x["next"],
         {
             "human_validation": "human_validation",
-            END: "apply_guardrails"  # Route to guardrails instead of END
+            END: "apply_guardrails"
         }
     )
-    
-    # workflow.add_edge("human_validation", END)
     
     # Compile the graph
     return workflow.compile(checkpointer=memory)
 
 
-def init_agent_state() -> AgentState:
+def init_agent_state(patient_context: str = "") -> AgentState:
     """Initialize the agent state with default values."""
     return {
         "messages": [],
@@ -706,34 +838,35 @@ def init_agent_state() -> AgentState:
         "needs_human_validation": False,
         "retrieval_confidence": 0.0,
         "bypass_routing": False,
-        "insufficient_info": False
+        "insufficient_info": False,
+        "patient_context": patient_context
     }
 
 
-def process_query(query: Union[str, Dict], conversation_history: List[BaseMessage] = None) -> str:
+def process_query(
+    query: Union[str, Dict],
+    user_id: str = "default",
+    patient_context: str = "",
+) -> str:
     """
     Process a user query through the agent decision system.
     
     Args:
         query: User input (text string or dict with text and image)
-        conversation_history: Optional list of previous messages, NOT NEEDED ANYMORE since the state saves the conversation history now
+        user_id: Unique user identifier used as LangGraph thread_id for memory isolation
+        patient_context: Patient health profile string for personalized responses
         
     Returns:
-        Response from the appropriate agent
+        Response dict from the appropriate agent
     """
-    # Initialize the graph
-    graph = create_agent_graph()
+    # Use the singleton graph (compiled once, reused)
+    graph = get_agent_graph()
 
-    # # Save Graph Flowchart
-    # image_bytes = graph.get_graph().draw_mermaid_png()
-    # decoded = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), -1)
-    # cv2.imwrite("./assets/graph.png", decoded)
-    # print("Graph flowchart saved in assets.")
+    # Per-user thread config for memory isolation
+    thread_config = {"configurable": {"thread_id": user_id}}
     
     # Initialize state
-    state = init_agent_state()
-    # if conversation_history:
-    #     state["messages"] = conversation_history
+    state = init_agent_state(patient_context=patient_context)
     
     # Add the current query
     state["current_input"] = query
@@ -744,18 +877,14 @@ def process_query(query: Union[str, Dict], conversation_history: List[BaseMessag
     
     state["messages"] = [HumanMessage(content=query)]
 
-    # result = graph.invoke(state, thread_config)
     result = graph.invoke(state, thread_config)
-    # print("######### DEBUG 4:", result)
-    # state["messages"] = [result["messages"][-1].content]
 
-    # Keep history to reasonable size (ANOTHER OPTION: summarize and store before truncating history)
-    if len(result["messages"]) > config.max_conversation_history:  # Keep last config.max_conversation_history messages
+    # Keep history to reasonable size
+    if len(result["messages"]) > config.max_conversation_history:
         result["messages"] = result["messages"][-config.max_conversation_history:]
 
-    # visualize conversation history in console
+    # Visualize conversation history in console
     for m in result["messages"]:
         m.pretty_print()
     
-    # Add the response to conversation history
     return result
