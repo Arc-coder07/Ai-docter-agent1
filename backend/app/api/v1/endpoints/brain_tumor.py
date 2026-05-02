@@ -15,7 +15,8 @@ from app.db.engine import get_session
 from app.core.auth import get_current_user
 from app.models import User
 from app.models.brain_tumor_scan import BrainTumorScan
-from app.agents.brain_tumor_detection.brain_tumor_detector import detector
+from app.agents.brain_tumor_detection.brain_tumor_detector import detector 
+
 
 import logging
 logger = logging.getLogger(__name__)
