@@ -1,6 +1,10 @@
 {
-    "python.defaultInterpreterPath": "${workspaceFolder}/backend/venv/bin/python",
+    "python.defaultInterpreterPath": "/Users/amarnadhpb/Desktop/Projects/College Project/Project Code/Med-Github-Clone/Ai-docter-agent/backend/venv/bin/python",
+    "python.pythonPath": "/Users/amarnadhpb/Desktop/Projects/College Project/Project Code/Med-Github-Clone/Ai-docter-agent/backend/venv/bin/python",
     "python.analysis.extraPaths": [
         "${workspaceFolder}/backend"
-    ]
+    ],
+    "python.analysis.autoSearchPaths": true,
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.terminal.activateEnvironment": true
 }

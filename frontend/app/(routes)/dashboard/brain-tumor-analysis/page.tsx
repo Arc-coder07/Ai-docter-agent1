@@ -624,7 +624,7 @@ export default function BrainTumorAnalysis() {
                                 </svg>
                             </div>
                             <h3 className="text-[17px] font-semibold text-[#1c1c1e] tracking-[-0.3px] m-0">
-                                Why Trust This System?
+                                Information
                             </h3>
                         </div>
 

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { UserButton, SignedIn, SignedOut } from "@clerk/nextjs";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function Header() {
   const [addBorder, setAddBorder] = useState(false);
@@ -46,7 +47,8 @@ export default function Header() {
         {/* DESKTOP MENU */}
         <div className="hidden lg:block">
           <div className="flex items-center">
-            <div className="gap-2 flex">
+            <div className="gap-2 flex items-center">
+              <ThemeToggle />
               
               {/* Option 1: User IS Logged In */}
               <SignedIn>
@@ -85,6 +87,7 @@ export default function Header() {
         {/* MOBILE MENU */}
         <div className="mt-2 cursor-pointer block lg:hidden">
           <div className="flex items-center gap-4">
+            <ThemeToggle />
             
             <SignedIn>
               <Link

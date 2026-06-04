@@ -1,7 +1,7 @@
 """
-AI Diagnosis PDF Report Generator
-Generates professional medical analysis reports as downloadable PDFs.
-Supports: Brain Tumor, Chest X-ray (COVID-19), and Skin Lesion analyses.
+AI Medical Report PDF Generator
+Generates professional medical reports as downloadable PDFs.
+Supports: Image analysis reports AND general conversation reports.
 """
 
 import os
@@ -9,7 +9,7 @@ import io
 import re
 from datetime import datetime
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, List, Dict
 
 from fpdf import FPDF
 
@@ -34,6 +34,10 @@ class DiagnosisReport:
     heatmap_path: str = ""        # Path to Grad-CAM heatmap (if available)
     session_id: str = ""
     report_date: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M"))
+    
+    # Conversation messages (for general chat reports)
+    # Each dict: {"role": "user"/"assistant", "content": str, "agent": str|None, "image_path": str|None}
+    conversation_messages: List[Dict] = field(default_factory=list)
 
 
 class MedicalReportPDF(FPDF):
@@ -44,6 +48,8 @@ class MedicalReportPDF(FPDF):
     BG_LIGHT = (245, 248, 252)     # Subtle background tint
     TEXT_PRIMARY = (30, 30, 30)
     TEXT_SECONDARY = (100, 100, 100)
+    USER_BG = (235, 242, 255)      # Light blue for user messages
+    AI_BG = (240, 250, 240)        # Light green for AI messages
     
     def header(self):
         # Header bar
@@ -53,7 +59,7 @@ class MedicalReportPDF(FPDF):
         self.set_font("Helvetica", "B", 14)
         self.set_text_color(255, 255, 255)
         self.set_y(5)
-        self.cell(0, 12, "MedSage AI - Medical Diagnosis Report", align="C")
+        self.cell(0, 12, "MedSage AI - Medical Report", align="C")
         self.ln(20)
     
     def footer(self):
@@ -73,7 +79,8 @@ class MedicalReportPDF(FPDF):
         self.set_fill_color(*self.ACCENT_COLOR)
         self.set_text_color(255, 255, 255)
         self.set_font("Helvetica", "B", 11)
-        self.cell(0, 8, f"  {title}", fill=True)
+        safe_title = title.encode('latin-1', errors='replace').decode('latin-1')
+        self.cell(0, 8, f"  {safe_title}", fill=True)
         self.ln(10)
         self.set_text_color(*self.TEXT_PRIMARY)
     
@@ -84,7 +91,8 @@ class MedicalReportPDF(FPDF):
         self.cell(50, 6, label)
         self.set_font("Helvetica", "", 9)
         self.set_text_color(*self.TEXT_PRIMARY)
-        self.cell(0, 6, value if value else "N/A")
+        safe_value = (value if value else "N/A").encode('latin-1', errors='replace').decode('latin-1')
+        self.cell(0, 6, safe_value)
         self.ln(6)
 
 
@@ -94,15 +102,22 @@ def _get_agent_display_name(agent_type: str) -> str:
         "BRAIN_TUMOR_AGENT": "Brain Tumor Analysis (MRI)",
         "CHEST_XRAY_AGENT": "Chest X-ray COVID-19 Detection",
         "SKIN_LESION_AGENT": "Skin Lesion Segmentation Analysis",
+        "CONVERSATION_AGENT": "General Medical Consultation",
+        "RAG_AGENT": "Medical Knowledge Query",
+        "SYMPTOM_AGENT": "Symptom Assessment",
+        "TRIAGE_AGENT": "Medical Triage",
+        "DIAGNOSTIC_AGENT": "Diagnostic Analysis",
+        "SPECIALIST_AGENT": "Specialist Consultation",
+        "META_AGENT": "Multi-Agent Consultation",
     }
     for key, val in mapping.items():
         if key in agent_type:
             return val
-    return "Medical Image Analysis"
+    return "Medical AI Consultation"
 
 
 def _clean_markdown(text: str) -> str:
-    """Strip markdown formatting for clean PDF text."""
+    """Strip markdown formatting and sanitize unicode for PDF text (latin-1 safe)."""
     # Remove bold/italic markers
     text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
     text = re.sub(r'\*(.+?)\*', r'\1', text)
@@ -112,12 +127,71 @@ def _clean_markdown(text: str) -> str:
     text = re.sub(r'^[-•]\s+', '  - ', text, flags=re.MULTILINE)
     # Remove horizontal rules
     text = re.sub(r'^---+$', '', text, flags=re.MULTILINE)
+    
+    # Replace common unicode symbols with ASCII equivalents
+    unicode_map = {
+        '\u26a0': '[!]',    # ⚠ warning
+        '\u26a0\ufe0f': '[!]',  # ⚠️ warning with variation selector
+        '\u2705': '[OK]',   # ✅
+        '\u274c': '[X]',    # ❌
+        '\u2714': '[v]',    # ✔
+        '\u2022': '-',      # •
+        '\u2013': '-',      # –
+        '\u2014': '--',     # —
+        '\u2018': "'",      # '
+        '\u2019': "'",      # '
+        '\u201c': '"',      # "
+        '\u201d': '"',      # "
+        '\u2192': '->',     # →
+        '\u2190': '<-',     # ←
+        '\u2026': '...',    # …
+        '\u00b7': '-',      # ·
+        '\u25cf': '-',      # ●
+        '\u25cb': 'o',      # ○
+        '\u2502': '|',      # │
+        '\u250c': '+',      # ┌
+        '\u2510': '+',      # ┐
+        '\u2514': '+',      # └
+        '\u2518': '+',      # ┘
+    }
+    for char, replacement in unicode_map.items():
+        text = text.replace(char, replacement)
+    
+    # Strip any remaining non-latin1 characters to prevent fpdf crash
+    text = text.encode('latin-1', errors='replace').decode('latin-1')
+    
     return text.strip()
+
+
+def _get_agent_short_label(agent: str) -> str:
+    """Short label for an agent in the conversation log."""
+    labels = {
+        "CONVERSATION_AGENT": "General AI",
+        "RAG_AGENT": "Knowledge AI",
+        "BRAIN_TUMOR_AGENT": "Brain Tumor AI",
+        "CHEST_XRAY_AGENT": "X-Ray AI",
+        "SKIN_LESION_AGENT": "Skin Lesion AI",
+        "SYMPTOM_AGENT": "Symptom AI",
+        "TRIAGE_AGENT": "Triage AI",
+        "DIAGNOSTIC_AGENT": "Diagnostic AI",
+        "SPECIALIST_AGENT": "Specialist AI",
+        "META_AGENT": "Meta AI",
+        "GUARDRAIL_AGENT": "Safety Check",
+        "HUMAN_VALIDATED": "Validated",
+    }
+    for key, val in labels.items():
+        if key in (agent or ""):
+            return val
+    return "AI Assistant"
 
 
 def generate_diagnosis_pdf(report: DiagnosisReport) -> bytes:
     """
     Generate a professional PDF diagnosis report.
+    
+    Supports two modes:
+    1. Image analysis reports (when image_path or analysis_result is set)
+    2. Conversation reports (when conversation_messages is populated)
     
     Args:
         report: DiagnosisReport dataclass with all report data
@@ -156,7 +230,7 @@ def generate_diagnosis_pdf(report: DiagnosisReport) -> bytes:
     if report.patient_medications:
         pdf.info_row("Current Medications:", report.patient_medications)
     
-    # ── Medical Image ──
+    # ── Medical Image (for image analysis reports) ──
     if report.image_path and os.path.exists(report.image_path):
         pdf.section_title("Uploaded Medical Image")
         try:
@@ -182,15 +256,66 @@ def generate_diagnosis_pdf(report: DiagnosisReport) -> bytes:
         except Exception:
             pass
     
-    # ── AI Analysis Results ──
-    pdf.section_title("AI Analysis Results")
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(*MedicalReportPDF.TEXT_PRIMARY)
+    # ── Conversation Log (for all sessions with messages) ──
+    if report.conversation_messages:
+        pdf.section_title("Consultation Conversation")
+        
+        for msg in report.conversation_messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            agent = msg.get("agent", "")
+            img_path = msg.get("image_path", "")
+            
+            if not content and not img_path:
+                continue
+            
+            # Role label + background color
+            if role == "user":
+                pdf.set_fill_color(*MedicalReportPDF.USER_BG)
+                label = "Patient"
+                label_color = (30, 80, 160)
+            else:
+                pdf.set_fill_color(*MedicalReportPDF.AI_BG)
+                label = _get_agent_short_label(agent) if agent else "AI Assistant"
+                label_color = (30, 120, 60)
+            
+            # Message header with role label
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.set_text_color(*label_color)
+            pdf.cell(0, 5, label, fill=True)
+            pdf.ln(5)
+            
+            # Message content
+            if content:
+                pdf.set_font("Helvetica", "", 8)
+                pdf.set_text_color(*MedicalReportPDF.TEXT_PRIMARY)
+                clean = _clean_markdown(content)
+                # Truncate extremely long messages to keep PDF reasonable
+                if len(clean) > 2000:
+                    clean = clean[:2000] + "\n... [truncated for report]"
+                pdf.multi_cell(0, 4, clean)
+            
+            # Inline image (if user uploaded an image in this message)
+            if img_path and os.path.exists(img_path):
+                pdf.ln(2)
+                try:
+                    pdf.image(img_path, x=15, w=55)
+                except Exception:
+                    pdf.set_font("Helvetica", "I", 7)
+                    pdf.cell(0, 4, "[Attached image could not be embedded]")
+                pdf.ln(3)
+            
+            pdf.ln(3)
     
-    clean_text = _clean_markdown(report.analysis_result)
-    # Write multi-cell for word wrapping
-    pdf.multi_cell(0, 5, clean_text)
-    pdf.ln(5)
+    # ── AI Analysis Summary (fallback for sessions without conversation_messages) ──
+    elif report.analysis_result:
+        pdf.section_title("AI Analysis Results")
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(*MedicalReportPDF.TEXT_PRIMARY)
+        
+        clean_text = _clean_markdown(report.analysis_result)
+        pdf.multi_cell(0, 5, clean_text)
+        pdf.ln(5)
     
     # ── Disclaimer Box ──
     pdf.ln(6)
@@ -215,16 +340,23 @@ def generate_diagnosis_pdf(report: DiagnosisReport) -> bytes:
     return pdf.output()
 
 
-def build_report_from_user_and_session(user, session, analysis_result: str, image_path: str = "", heatmap_path: str = "") -> DiagnosisReport:
+def build_report_from_user_and_session(
+    user, session, 
+    analysis_result: str = "", 
+    image_path: str = "", 
+    heatmap_path: str = "",
+    conversation_messages: list = None,
+) -> DiagnosisReport:
     """
     Convenience factory to build a DiagnosisReport from a User ORM object and session data.
     
     Args:
         user: User SQLModel instance
         session: ChatSession SQLModel instance
-        analysis_result: The AI agent's analysis text
+        analysis_result: The AI agent's analysis text (for legacy image reports)
         image_path: Path to the uploaded medical image
         heatmap_path: Path to the Grad-CAM heatmap image (optional)
+        conversation_messages: List of message dicts for conversation log
     """
     bmi_str = ""
     if user.height_cm and user.weight_kg:
@@ -245,4 +377,5 @@ def build_report_from_user_and_session(user, session, analysis_result: str, imag
         image_path=image_path,
         heatmap_path=heatmap_path,
         session_id=str(session.id),
+        conversation_messages=conversation_messages or [],
     )

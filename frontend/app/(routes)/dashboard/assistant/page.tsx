@@ -570,10 +570,12 @@ export default function MedicalAssistantPage() {
                         </div>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        {sessionId && messages.some(m => m.agent && m.agent.match(/BRAIN_TUMOR_AGENT|CHEST_XRAY_AGENT|SKIN_LESION_AGENT/)) && (
+                        {sessionId && messages.some(m => m.role === 'assistant') && (
                             <button
                                 onClick={async () => {
                                     try {
+                                        const { toast } = await import('sonner')
+                                        toast.loading('Generating report...', { id: 'download-report' })
                                         const headers = await getAuthHeaders()
                                         const response = await axios.get(
                                             `${API_URL}/api/v1/assistant/sessions/${sessionId}/download-report`,
@@ -585,8 +587,22 @@ export default function MedicalAssistantPage() {
                                         link.download = `MedSage_Report.pdf`
                                         link.click()
                                         window.URL.revokeObjectURL(url)
-                                    } catch (err) {
+                                        toast.success('Report downloaded successfully!', { id: 'download-report' })
+                                    } catch (err: any) {
                                         console.error('Download failed:', err)
+                                        const { toast } = await import('sonner')
+                                        // When responseType is blob, error response data is a Blob — parse it
+                                        let detail = 'Failed to generate report'
+                                        try {
+                                            if (err?.response?.data instanceof Blob) {
+                                                const text = await err.response.data.text()
+                                                const json = JSON.parse(text)
+                                                detail = json.detail || detail
+                                            } else {
+                                                detail = err?.response?.data?.detail || err?.message || detail
+                                            }
+                                        } catch {}
+                                        toast.error(detail, { id: 'download-report' })
                                     }
                                 }}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors mr-2 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20 dark:hover:bg-blue-500/20"

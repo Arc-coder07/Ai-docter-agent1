@@ -6,7 +6,7 @@ import { CgWebsite } from "react-icons/cg";
 
 export default function Footer() {
   return (
-    <footer className="border-t mt-20">
+    <footer className="border-t border-gray-100 dark:border-white/[0.05] bg-white dark:bg-[#020408] transition-colors duration-500">
       <div className="max-w-6xl mx-auto py-8 px-5">
         <div className="flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center space-x-2 mb-4 md:mb-0">

@@ -1,115 +1,108 @@
-# Doctor AI Agent
+# MedSage: Advanced AI Clinical Assistant
 
-A Next.js application that provides an AI-powered medical assistant with real-time voice conversation capabilities.
+MedSage (AI Doctor Agent) is a comprehensive, AI-powered healthcare platform designed to assist both patients and healthcare professionals. The system acts as an intelligent medical assistant capable of facilitating real-time voice consultations, automated diagnostic analysis of medical imaging, report processing, and context-aware medical knowledge retrieval. The architecture gracefully combines Next.js for a robust, responsive frontend with a powerful Python (FastAPI) backend that leverages Large Language Models (LLMs), Computer Vision, and multi-agent coordination.
 
-## Features
+---
 
-- Real-time voice conversation with AI medical agents
-- Speech-to-Text using AssemblyAI WebSocket API
-- Text-to-Speech using Murf AI with browser TTS fallback
-- AI responses powered by OpenRouter/OpenAI
-- Captions for both user and AI assistant speech
-- Session management and history
-- Turn-taking conversation flow (listens for user input after AI speaks)
-- User authentication with Clerk
+## 🏛️ Core Architecture
 
-  ## Video
-[Click here](https://imagekit.io/player/embed/rmyd10ywi/Recording%202025-06-29%20204016.mp4?updatedAt=1751212929355&thumbnail=https%3A%2F%2Fik.imagekit.io%2Frmyd10ywi%2FRecording%25202025-06-29%2520204016.mp4%2Fik-thumbnail.jpg%3FupdatedAt%3D1751212929355&updatedAt=1751212929355)
+The platform follows a modern, decoupled architecture consisting of two primary subsystems:
 
-## Setup
+1. **Frontend Patient & Doctor Portals (Next.js)**
+   A dynamic user interface built with Next.js, React, and Tailwind CSS. It supports discrete workflows for both patients (seeking consultation and tracking health metrics) and doctors (managing patients, utilizing AI diagnostic tools, and reviewing reports).
+2. **Multi-Agent AI Core & Diagnostic Engine (FastAPI)**
+   A highly specialized Python backend responsible for orchestrating multiple AI agents, processing unstructured medical data (PDF reports), and analyzing medical imaging (X-rays, MRI scans) using state-of-the-art machine learning models.
 
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Create a `.env.local` file with the following variables:
-   ```
-   # API Keys
-   NEXT_PUBLIC_ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
-   MURF_API_KEY=your_murf_api_key_here
-   OPEN_ROUTER_API_KEY=your_openrouter_api_key_here
-   GEMINI_API_KEY=your_gemini_api_key_here
-   # Get your Gemini API key from: https://makersuite.google.com/app/apikey
+---
 
-   # Authentication (Clerk)
-   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key_here
-   CLERK_SECRET_KEY=your_clerk_secret_key_here
-   NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-   NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/dashboard
-   NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-   NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/dashboard
+## ✨ Key Features & Modules
 
-   # Database
-   DATABASE_URL="postgresql://postgres:password@localhost:5432/doctor_ai?schema=public"
+### 1. Interactive Voice & Text Consultations
+A natural turn-taking voice interface that simulates a real telehealth consulting experience.
+* **Speech-to-Text & Processing**: Captures real-time patient audio using AssemblyAI WebSockets. Silence detection indicates the end of a user's turn.
+* **Generative Inference**: Processes transcribed text through localized LLMs or APIs (Gemini, OpenRouter) to provide empathetic, context-aware responses.
+* **Text-to-Speech (TTS)**: Leverages ElevenLabs and Murf AI to synthesize natural-sounding AI voice responses, complete with browser-level fallback mechanisms.
 
-   # Other Configuration
-   NEXT_PUBLIC_APP_URL=http://localhost:3000
-   ```
+### 2. Multi-Agent System & Context-Aware Q&A
+An advanced multi-agent orchestrator utilizing LangChain and LangGraph to delegate medical queries dynamically. 
+* **RAG (Retrieval-Augmented Generation)**: Patient queries are cross-referenced with vector embeddings (using Qdrant and FAISS) stored over authoritative clinical guidelines, ensuring grounded and accurate insights.
+* **Medical Report Analysis**: Users can upload complex PDF lab reports. The system extracts text using `pdfplumber`, chunks the data, generates semantic embeddings, and provides understandable summaries and actionable insights.
 
-4. Set up the database:
-   ```bash
-   npx prisma migrate dev
-   ```
+### 3. Medical Imaging Diagnostics
+Integrated computer vision pipelines designed to act as a second opinion for radiologists and general practitioners.
+* **Chest X-Ray Pneumonia Detection**: Utilizes TensorFlow and Hugging Face Transformers to classify radiograph images, identifying potential pneumonia infiltrates.
+* **Brain Tumor Analysis**: A PyTorch-based pipeline that processes MRI scans using OpenCV and Pillow to detect anomalous masses and segment probable brain tumors.
 
-5. Run the development server:
-   ```bash
-   npm run dev
-   ```
+### 4. Doctor Appointment & Consultation Booking
+A fully-featured scheduling and video consultation system for patients and doctors.
+* **Doctor Availability Management**: Secure portal for doctors to set automated availability slots.
+* **Patient Booking System**: Intelligent slot generation resolving conflicts to prevent double-booking.
+* **Integrated Video Calls**: Deeply embedded open-source video conferencing (via Jitsi Meet) launching instantly from active appointments.
 
-## Voice Conversation Flow
+### 5. Patient Health & Medication Management
+Holistic tracking of patient well-being and medication adherence.
+* **Health Profiles & Symptom Checker**: Detailed user demographics, vitals tracking, and a dynamic symptom checker module feeding contextual data to the generative AI.
+* **Medication Tracker**: Localized tracking for active prescriptions, integrating reminders, dosage times, and potential automated refill linking.
 
-The application implements a natural turn-taking conversation flow:
+### 6. Patient Onboarding & Role Management
+A comprehensive sign-up flow tailored to the user's role:
+* **Patients**: Provide initial health metrics, history, and medication details which are fed into the assistant’s context window for personalized advice.
+* **Doctors**: A secure secondary portal validating medical credentials to unlock advanced diagnostic tools and patient management features.
 
-1. **Start Call**: When you click "Start Call", the AI introduces itself
-2. **AI Speaking**: While the AI is speaking, a visual indicator appears and your microphone is muted
-3. **User Speaking**: After the AI finishes, your microphone is automatically activated (indicated by a green mic icon)
-4. **Silence Detection**: If you pause for 2 seconds, the system assumes you've finished speaking
-5. **Processing**: Your speech is converted to text, sent to the AI, and the AI responds
-6. **Repeat**: This back-and-forth conversation continues until you end the call
+---
 
-## Troubleshooting
+## 🛠️ Technology Stack
 
-If you encounter issues with the voice conversation functionality:
+The MedSage ecosystem incorporates a diverse array of modern libraries and frameworks spanning web development, deep learning, and vector databases.
 
-1. **Microphone Access**: Make sure your browser has permission to access your microphone.
+### Frontend Technologies
+* **Framework**: Next.js 15 (React 19), Server Components, Turbopack
+* **Language**: TypeScript
+* **Styling**: Tailwind CSS v4, Tailwind Animate, Radix UI primitives
+* **State Management**: Zustand, React Context
+* **Real-time Communication**: Socket.io-client, Vapi AI Web
+* **Data Visualization**: Recharts, Framer Motion
 
-2. **AssemblyAI API**: 
-   - Verify your AssemblyAI API key is correctly set in the `.env.local` file
-   - The key should be prefixed with `NEXT_PUBLIC_` since it's used on the client side
-   - Check your AssemblyAI account has sufficient credits
+### Backend & AI Frameworks
+* **Framework**: FastAPI, Uvicorn
+* **Database & ORM**: PostgreSQL, SQLModel, Alembic, asyncpg
+* **LLM Orchestration**: LangChain, LangGraph, LlamaIndex
+* **Vector Databases**: Qdrant, FAISS (Local)
+* **Computer Vision**: PyTorch, torchvision, TensorFlow, OpenCV, python-multipart
+* **Document Processing**: pdfplumber, PyPDF2
+* **Audio Processing**: pydub
 
-3. **Murf AI TTS**: If text-to-speech isn't working:
-   - Check that your Murf API key is correctly set as `MURF_API_KEY` (not `MURF_AI_API_KEY`)
-   - The application will automatically fall back to browser TTS if Murf AI fails
-   - If you don't have a Murf API key, the system will use browser TTS
+### AI Models & Third-Party APIs
+* **Large Language Models**: Google Gemini (via `google-genai`), OpenAI API, OpenRouter, Groq
+* **Speech & Voice**: AssemblyAI, ElevenLabs, Murf AI
+* **Authentication**: Clerk (`@clerk/nextjs`)
 
-4. **Authentication Issues**:
-   - Ensure your Clerk API keys are correctly set in the `.env.local` file
-   - Check that all the Clerk redirect URLs are properly configured
+---
 
-5. **Database Errors**: If you see database connection errors:
-   - Make sure your PostgreSQL database is running
-   - Check that the `DATABASE_URL` in `.env.local` is correct
-   - If you don't need database functionality, the app will still work with limited features
+## 🔄 System Flow Summaries
 
-6. **Browser Compatibility**: 
-   - The voice features work best in Chrome and Edge
-   - Safari may have limited WebSocket support
-   - Make sure your browser supports the Web Audio API
+### Voice Conversation Pipeline
+1. **Audio Capture**: Browser Web Audio API securely streams microphone data.
+2. **Transcription**: AssemblyAI processes chunks into text in real-time.
+3. **Inference Engine**: Transcriptions passed to the FastAPI `/api/v1/chat` endpoint where the Multi-Agent framework queries patient history and formulates a response.
+4. **Vocalization**: The generated text is passed to the TTS service (ElevenLabs/Murf AI), returning an audio stream that is seamlessly played for the user while muting the microphone to avoid feedback loops.
 
-7. **No Speech Detected**:
-   - Check if the microphone indicator turns green after the AI speaks
-   - Try speaking louder or moving closer to your microphone
-   - Check if your browser's console shows any WebSocket errors
+### Diagnostic Image Flow
+1. **Image Upload**: Doctor uploads an MRI/X-ray via drag-and-drop Next.js components.
+2. **Preprocessing**: Image sent to the `/api/v1/brain_tumor` or `/api/v1/xray` Python endpoint. OpenCV normalizes contrast and resizes the image for tensor compatibility.
+3. **Prediction**: PyTorch/TensorFlow models run localized inference against the structured medical dataset.
+4. **Report Generation**: A confident metric score paired with qualitative LLM-generated analysis is relayed back to the front-end dashboard.
 
-8. **Gemini API / Medical Report Analysis**:
-   - If you see "AI service error. Please check Gemini API key configuration":
-     - Ensure `GEMINI_API_KEY` is set in your `.env.local` file (not `.env`)
-     - Get your API key from: https://makersuite.google.com/app/apikey
-     - Restart your dev server after adding the key: `npm run dev`
-     - The API key should start with "AIza" and be at least 30 characters long
-   - If you see quota errors, check your Google Cloud Console for API usage limits
-   - For PDF analysis, ensure the PDF is text-based (not scanned images)
+### Document RAG Pipeline
+1. **Ingestion**: PDF report sent via frontend portal.
+2. **Chunking**: Text split into semantic overlapping chunks using `langchain-text-splitters`.
+3. **Embedding**: `sentence-transformers` creates dense vector representations.
+4. **Querying**: User asks a question about their report; the query is embedded, and k-nearest chunks are retrieved from the FAISS/Qdrant vector store to shape the LLM's response.
 
+---
 
+## 🚀 Future Scope
+
+* **Real-Time Clinical Resources**: Integration with live Electronic Health Records (EHR/FHIR) to synchronize patient vitals directly.
+* **Expanded Pathologies**: Extending computer vision models to assess additional specialties, such as retinal scans or dermatology imaging.
+* **Advanced Multi-Modal RAG**: Storing and retrieving visually rich documents (like annotated scans) alongside textual data for comprehensive generative responses.

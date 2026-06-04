@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { UserButton, useUser } from '@clerk/nextjs'
 import { branding, colors, sidebarConfig, layout } from '@/lib/design.config'
+import { SettingsDialog, HelpDialog, AccountDialog } from './SidebarDialogs'
 import {
     LayoutDashboard,
     Mic,
@@ -27,6 +28,12 @@ import {
 const iconMap: Record<string, React.ComponentType<any>> = {
     LayoutDashboard, Mic, Bot, FileText, Activity, Calendar, History,
     Settings, HelpCircle, Stethoscope, HeartPulse, UserRound, Pill, Brain,
+}
+
+// Map bottom item labels to their dialog wrappers
+const dialogMap: Record<string, React.ComponentType<{ children: React.ReactNode }>> = {
+    'Help & Support': HelpDialog,
+    'Settings': SettingsDialog,
 }
 
 export default function Sidebar() {
@@ -108,30 +115,46 @@ export default function Sidebar() {
             <div className="px-3 py-4 border-t border-gray-100/50 dark:border-white/5 space-y-1">
                 {sidebarConfig.bottomItems.map((item) => {
                     const Icon = iconMap[item.icon] || HelpCircle
-                    return (
-                        <Link
-                            key={item.label}
-                            href={item.href}
-                            className="flex items-center gap-3 px-3 py-2.5 rounded-2xl text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+                    const DialogWrapper = dialogMap[item.label]
+
+                    const buttonContent = (
+                        <button
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
                             title={collapsed ? item.label : undefined}
                         >
                             <div className="flex items-center justify-center flex-shrink-0 w-6 h-6">
                                 <Icon className="w-[18px] h-[18px]" />
                             </div>
                             {!collapsed && <span className="text-sm tracking-tight">{item.label}</span>}
+                        </button>
+                    )
+
+                    if (DialogWrapper) {
+                        return (
+                            <DialogWrapper key={item.label}>
+                                {buttonContent}
+                            </DialogWrapper>
+                        )
+                    }
+
+                    return (
+                        <Link key={item.label} href={item.href} className="block">
+                            {buttonContent}
                         </Link>
                     )
                 })}
 
                 {/* User */}
-                <div className="flex items-center gap-3 px-3 py-2.5 mt-2 rounded-2xl hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer">
-                    <UserButton afterSignOutUrl="/" appearance={{
-                        elements: { avatarBox: "w-7 h-7" }
-                    }} />
-                    {!collapsed && (
-                        <span className="text-sm font-medium tracking-tight text-gray-700 dark:text-gray-300 truncate">Account</span>
-                    )}
-                </div>
+                <AccountDialog>
+                    <div className="flex items-center gap-3 px-3 py-2.5 mt-2 rounded-2xl hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer">
+                        <UserButton afterSignOutUrl="/" appearance={{
+                            elements: { avatarBox: "w-7 h-7" }
+                        }} />
+                        {!collapsed && (
+                            <span className="text-sm font-medium tracking-tight text-gray-700 dark:text-gray-300 truncate">Account</span>
+                        )}
+                    </div>
+                </AccountDialog>
             </div>
 
             {/* Collapse Toggle */}
@@ -148,3 +171,4 @@ export default function Sidebar() {
         </aside>
     )
 }
+
