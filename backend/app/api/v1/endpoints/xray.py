@@ -83,6 +83,9 @@ async def predict_pneumonia(
 
         # Run prediction
         result = detector.predict(contents, filename=file.filename or "")
+        
+        if "error" in result:
+            raise RuntimeError(result["error"])
 
         # Generate heatmap (base64 encoded)
         try:
@@ -98,11 +101,11 @@ async def predict_pneumonia(
             file_path=f"/uploads/xrays/{saved_filename}",
             patient_name=patient_name,
             patient_age=patient_age,
-            diagnosis=result["diagnosis"],
-            confidence=result["confidence"],
-            confidence_level=result["confidence_level"],
-            recommendation=result["recommendation"],
-            raw_score=result["raw_score"]
+            diagnosis=result.get("diagnosis", "Unknown"),
+            confidence=result.get("confidence", 0.0),
+            confidence_level=result.get("confidence_level", "Unknown"),
+            recommendation=result.get("recommendation", ""),
+            raw_score=result.get("raw_score", 0.0)
         )
         db.add(scan)
         db.commit()
@@ -111,19 +114,19 @@ async def predict_pneumonia(
         # Return response with heatmap
         return {
             "id": str(scan.id),
-            "diagnosis": result["diagnosis"],
-            "confidence": result["confidence"],
-            "confidence_level": result["confidence_level"],
-            "recommendation": result["recommendation"],
-            "raw_score": result["raw_score"],
+            "diagnosis": result.get("diagnosis", "Unknown"),
+            "confidence": result.get("confidence", 0.0),
+            "confidence_level": result.get("confidence_level", "Unknown"),
+            "recommendation": result.get("recommendation", ""),
+            "raw_score": result.get("raw_score", 0.0),
             "image_size": result.get("image_size"),
             "analysis_time": result.get("analysis_time", 0),
             "patient_name": patient_name,
             "patient_age": patient_age,
             "file_name": file.filename,
             "heatmap_base64": heatmap_b64,
-            "validation_metrics": result["validation_metrics"],
-            "disclaimer": result["disclaimer"],
+            "validation_metrics": result.get("validation_metrics", {}),
+            "disclaimer": result.get("disclaimer", "This AI system is for preliminary screening only. Always consult qualified healthcare professionals."),
             "created_at": scan.created_at.isoformat()
         }
 

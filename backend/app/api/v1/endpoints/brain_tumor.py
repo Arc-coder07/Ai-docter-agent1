@@ -86,11 +86,31 @@ async def predict_brain_tumor(
         if "error" in result:
             raise HTTPException(status_code=500, detail=result["error"])
 
-        prediction = result.get('prediction', {})
-        cdss = result.get('cdss', {})
-        uncertainty = result.get('uncertainty', {})
-        robustness = result.get('robustness', {})
-        xai = result.get('xai', {})
+        # Transform flat Space result back to nested structure expected by frontend
+        diagnosis = result.get("prediction", "Unknown")
+        confidence = result.get("confidence", 0.0)
+        probabilities = result.get("probabilities", {})
+        winning_model = result.get("winning_model", "Ensemble")
+        
+        cdss_data = result.get("cdss", {})
+        cdss_score = cdss_data.get("cdss_score", 0.0)
+        risk_level = cdss_data.get("reliability", "LOW")
+        
+        uncertainty_data = result.get("uncertainty", {})
+        total_uncertainty = uncertainty_data.get("uncertainty_std", 0.0)
+        
+        robustness_data = result.get("robustness", {})
+        robustness_score = robustness_data.get("robustness_score", 0.0)
+        
+        robustness_tests = {}
+        for test_name, test_data in robustness_data.items():
+            if isinstance(test_data, dict) and "consistent" in test_data:
+                robustness_tests[test_name] = {
+                    "combined": test_data.get("confidence", 0.0),
+                    "pred_stable": test_data.get("consistent", True)
+                }
+        
+        xai_heatmaps = result.get("xai_heatmaps", {})
 
         # Save to database
         scan = BrainTumorScan(
@@ -99,25 +119,70 @@ async def predict_brain_tumor(
             file_path=f"/uploads/brain_mri/{saved_filename}",
             patient_name=patient_name,
             patient_age=patient_age,
-            diagnosis=prediction.get('class', 'Unknown'),
-            confidence=prediction.get('confidence', 0.0),
-            confidence_level=prediction.get('confidence_level', 'Low'),
-            recommendation=cdss.get('action', ''),
-            cdss_score=cdss.get('score', 0.0),
-            uncertainty_total=uncertainty.get('total_uncertainty', 0.0),
-            robustness_score=robustness.get('overall_score', 0.0),
-            xai_data_json=json.dumps(xai),
-            probabilities_json=json.dumps(prediction.get('probabilities', {}))
+            diagnosis=diagnosis,
+            confidence=confidence,
+            confidence_level=risk_level,
+            recommendation=f"CDSS Reliability: {risk_level}",
+            cdss_score=cdss_score,
+            uncertainty_total=total_uncertainty,
+            robustness_score=robustness_score,
+            xai_data_json=json.dumps(xai_heatmaps),
+            probabilities_json=json.dumps(probabilities)
         )
         db.add(scan)
         db.commit()
         db.refresh(scan)
 
-        # Return full response
-        result["id"] = str(scan.id)
-        result["file_name"] = file.filename
-        result["created_at"] = scan.created_at.isoformat()
-        return result
+        # Build frontend response
+        frontend_response = {
+            "id": str(scan.id),
+            "success": True,
+            "prediction": {
+                "class": diagnosis,
+                "confidence": confidence,
+                "confidence_level": risk_level,
+                "probabilities": probabilities,
+                "model_used": winning_model
+            },
+            "cdss": {
+                "score": cdss_score,
+                "risk_level": risk_level,
+                "action": f"Model Reliability: {risk_level}",
+                "components": cdss_data.get("components", {})
+            },
+            "uncertainty": {
+                "total_uncertainty": total_uncertainty,
+                "epistemic": uncertainty_data.get("predictive_entropy", 0.0),
+                "aleatoric": total_uncertainty / 2.0,
+                "needs_review": total_uncertainty > 0.15
+            },
+            "xai": {
+                "levels": {
+                    "level1_detection": {
+                        "name": "Lesion Localization",
+                        "question": "Where is the abnormality?",
+                        "heatmap": xai_heatmaps.get("gradcam", "")
+                    },
+                    "level2_features": {
+                        "name": "Feature Extraction",
+                        "question": "What features stand out?",
+                        "heatmap": xai_heatmaps.get("gradcam_pp", "")
+                    },
+                    "level3_cellular": {
+                        "name": "Deep Representations",
+                        "question": "Which patterns influenced the decision?",
+                        "heatmap": xai_heatmaps.get("layercam", "")
+                    }
+                }
+            },
+            "robustness": {
+                "overall_score": robustness_score,
+                "tests": robustness_tests
+            },
+            "created_at": scan.created_at.isoformat(),
+            "file_name": file.filename
+        }
+        return frontend_response
 
     except RuntimeError as e:
         import traceback

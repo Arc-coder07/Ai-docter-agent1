@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
       { hostname: "localhost" },
       { hostname: "randomuser.me" },
       { hostname: "images.unsplash.com" },
+      { hostname: "*.onrender.com" },
     ],
   },
   // Ensure pdf-parse is not bundled for client-side
