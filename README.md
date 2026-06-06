@@ -1,108 +1,258 @@
-# MedSage: Advanced AI Clinical Assistant
+<p align="center">
+  <img src="https://img.shields.io/badge/MedSage-AI%20Clinical%20Assistant-blue?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PHBhdGggZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6bS0yIDE1bC01LTUgMS40MS0xLjQxTDEwIDEuMTdsNy41OS03LjU5TDE5IDkuNTlsLTkgOXoiLz48L3N2Zz4=&labelColor=0f172a" alt="MedSage Badge" />
+</p>
 
-MedSage (AI Doctor Agent) is a comprehensive, AI-powered healthcare platform designed to assist both patients and healthcare professionals. The system acts as an intelligent medical assistant capable of facilitating real-time voice consultations, automated diagnostic analysis of medical imaging, report processing, and context-aware medical knowledge retrieval. The architecture gracefully combines Next.js for a robust, responsive frontend with a powerful Python (FastAPI) backend that leverages Large Language Models (LLMs), Computer Vision, and multi-agent coordination.
+<h1 align="center">🩺 MedSage — AI Clinical Assistant</h1>
+
+<p align="center">
+  <strong>An intelligent, multi-agent healthcare platform that combines real-time voice consultations, medical imaging diagnostics, and context-aware knowledge retrieval into a single, unified experience.</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js_15-black?style=flat-square&logo=next.js" />
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" />
+  <img src="https://img.shields.io/badge/LangGraph-FF6F00?style=flat-square&logo=langchain&logoColor=white" />
+  <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" />
+  <img src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat-square&logo=tensorflow&logoColor=white" />
+  <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" />
+</p>
 
 ---
 
-## 🏛️ Core Architecture
+## 🏛️ Architecture Overview
 
-The platform follows a modern, decoupled architecture consisting of two primary subsystems:
+MedSage follows a modern, decoupled architecture with two primary subsystems:
 
-1. **Frontend Patient & Doctor Portals (Next.js)**
-   A dynamic user interface built with Next.js, React, and Tailwind CSS. It supports discrete workflows for both patients (seeking consultation and tracking health metrics) and doctors (managing patients, utilizing AI diagnostic tools, and reviewing reports).
-2. **Multi-Agent AI Core & Diagnostic Engine (FastAPI)**
-   A highly specialized Python backend responsible for orchestrating multiple AI agents, processing unstructured medical data (PDF reports), and analyzing medical imaging (X-rays, MRI scans) using state-of-the-art machine learning models.
+| Layer | Stack | Purpose |
+|-------|-------|---------|
+| **Frontend** | Next.js 15 · React 19 · TypeScript · Tailwind CSS v4 | Patient & Doctor portals with real-time interactivity |
+| **Backend** | FastAPI · Python · LangGraph · SQLModel · Alembic | Multi-agent AI orchestration, diagnostics & data management |
+| **ML Inference** | Hugging Face Spaces (PyTorch & TensorFlow) | Scalable, GPU-accelerated medical image analysis |
+| **Database** | PostgreSQL · Qdrant · FAISS | Structured data, vector embeddings & semantic search |
+| **Auth** | Clerk | Secure role-based authentication (Patient / Doctor) |
 
 ---
 
-## ✨ Key Features & Modules
+## ✨ Features
 
-### 1. Interactive Voice & Text Consultations
-A natural turn-taking voice interface that simulates a real telehealth consulting experience.
-* **Speech-to-Text & Processing**: Captures real-time patient audio using AssemblyAI WebSockets. Silence detection indicates the end of a user's turn.
-* **Generative Inference**: Processes transcribed text through localized LLMs or APIs (Gemini, OpenRouter) to provide empathetic, context-aware responses.
-* **Text-to-Speech (TTS)**: Leverages ElevenLabs and Murf AI to synthesize natural-sounding AI voice responses, complete with browser-level fallback mechanisms.
+### 🤖 Multi-Agent AI System (LangGraph)
 
-### 2. Multi-Agent System & Context-Aware Q&A
-An advanced multi-agent orchestrator utilizing LangChain and LangGraph to delegate medical queries dynamically. 
-* **RAG (Retrieval-Augmented Generation)**: Patient queries are cross-referenced with vector embeddings (using Qdrant and FAISS) stored over authoritative clinical guidelines, ensuring grounded and accurate insights.
-* **Medical Report Analysis**: Users can upload complex PDF lab reports. The system extracts text using `pdfplumber`, chunks the data, generates semantic embeddings, and provides understandable summaries and actionable insights.
+The core intelligence is powered by a **LangGraph state machine** that dynamically routes queries to specialized agents:
 
-### 3. Medical Imaging Diagnostics
-Integrated computer vision pipelines designed to act as a second opinion for radiologists and general practitioners.
-* **Chest X-Ray Pneumonia Detection**: Utilizes TensorFlow and Hugging Face Transformers to classify radiograph images, identifying potential pneumonia infiltrates.
-* **Brain Tumor Analysis**: A PyTorch-based pipeline that processes MRI scans using OpenCV and Pillow to detect anomalous masses and segment probable brain tumors.
+| Agent | Function |
+|-------|----------|
+| **Conversation Agent** | General medical Q&A with empathetic, context-aware responses |
+| **RAG Agent** | Retrieval-Augmented Generation over clinical guidelines (FAISS/Qdrant) |
+| **Web Search Agent** | Real-time medical information for recent developments & outbreaks |
+| **Brain Tumor Agent** | MRI scan analysis for tumor detection using PyTorch ViT models |
+| **Chest X-Ray Agent** | COVID-19 detection from chest radiographs via TensorFlow |
+| **Skin Lesion Agent** | Dermatological image segmentation and classification |
+| **Symptom Checker Agent** | Structured symptom assessment with severity grading & differential diagnosis |
+| **Drug Interaction Agent** | Medication safety analysis with interaction severity classification |
 
-### 4. Doctor Appointment & Consultation Booking
-A fully-featured scheduling and video consultation system for patients and doctors.
-* **Doctor Availability Management**: Secure portal for doctors to set automated availability slots.
-* **Patient Booking System**: Intelligent slot generation resolving conflicts to prevent double-booking.
-* **Integrated Video Calls**: Deeply embedded open-source video conferencing (via Jitsi Meet) launching instantly from active appointments.
+**Key orchestration features:**
+- 🛡️ **Input & Output Guardrails** — Content safety filtering on both user inputs and AI responses
+- 🔄 **Confidence-Based Routing** — Low-confidence RAG answers automatically escalate to web search
+- ✅ **Human Validation Loop** — Medical diagnoses are flagged for healthcare professional review
+- 🧠 **Patient Context Injection** — Responses are personalized using the patient's health profile, allergies, and current medications
 
-### 5. Patient Health & Medication Management
-Holistic tracking of patient well-being and medication adherence.
-* **Health Profiles & Symptom Checker**: Detailed user demographics, vitals tracking, and a dynamic symptom checker module feeding contextual data to the generative AI.
-* **Medication Tracker**: Localized tracking for active prescriptions, integrating reminders, dosage times, and potential automated refill linking.
+---
 
-### 6. Patient Onboarding & Role Management
-A comprehensive sign-up flow tailored to the user's role:
-* **Patients**: Provide initial health metrics, history, and medication details which are fed into the assistant’s context window for personalized advice.
-* **Doctors**: A secure secondary portal validating medical credentials to unlock advanced diagnostic tools and patient management features.
+### 🎤 Voice & Text Consultations
+
+A natural, turn-taking voice interface that simulates a real telehealth experience:
+
+- **Real-Time Speech-to-Text** — Captures patient audio with silence-based turn detection
+- **Generative AI Responses** — Processed through LLMs (Gemini, OpenRouter) for empathetic, medically-grounded answers
+- **Text-to-Speech Synthesis** — Natural voice responses with ElevenLabs/Murf AI and browser-level fallback
+- **Vapi AI Integration** — Alternative voice consultation pipeline via Vapi Web SDK
+- **Full Conversation History** — All consultations are persisted and retrievable
+
+---
+
+### 🧠 Brain Tumor Detection
+
+- Upload **brain MRI scans** directly from the dashboard
+- PyTorch Vision Transformer (ViT) model classifies tumor presence
+- Deployed on **Hugging Face Spaces** for GPU-accelerated inference
+- Returns confidence scores with LLM-generated clinical narrative
+- Flags results for human validation by healthcare professionals
+
+---
+
+### 🫁 Chest X-Ray Analysis
+
+- Upload **chest X-ray images** for automated COVID-19 screening
+- TensorFlow-based classification model (COVID-19 vs. Normal)
+- Returns prediction class with percentage confidence score
+- Deployed on **Hugging Face Spaces** (TensorFlow runtime)
+- Includes professional review workflow for diagnostic results
+
+---
+
+### 📄 Medical Report Analysis (RAG Pipeline)
+
+- Upload **PDF lab reports** and medical documents
+- Automatic text extraction via `pdfplumber` with semantic chunking
+- Dense vector embeddings generated using `sentence-transformers`
+- Stored in FAISS/Qdrant vector databases for instant retrieval
+- Ask natural-language questions about your reports — the AI retrieves relevant chunks and generates clear, actionable summaries
+
+---
+
+### 🔍 Symptom Checker
+
+- Describe symptoms in natural language (e.g., *"I have chest pain and shortness of breath"*)
+- AI identifies and categorizes all reported symptoms with severity grading
+- Provides **top 3–5 differential diagnoses** ranked by likelihood with confidence percentages
+- Recommends next steps: self-care, doctor visit, or emergency
+- Assigns an **urgency level** (Low / Medium / High / Emergency)
+- Considers patient's existing health profile for personalized assessment
+
+---
+
+### 💊 Drug Interaction Checker
+
+- Query potential interactions between medications (e.g., *"Can I take ibuprofen with warfarin?"*)
+- Cross-references drugs from user query **and** patient health profile
+- Classifies interactions by severity: Mild / Moderate / Severe / Contraindicated
+- Provides clinical significance explanation and recommended actions
+- Outputs structured interaction tables for clarity
+
+---
+
+### 📅 Doctor Appointment & Video Consultation
+
+A complete scheduling and telemedicine system:
+
+- **Doctor Registration Portal** — Secure onboarding with medical credential verification
+- **Availability Management** — Doctors configure recurring availability slots
+- **Smart Slot Generation** — Conflict resolution prevents double-booking
+- **Patient Booking Flow** — Browse available doctors, select slots, and book appointments
+- **Integrated Video Calls** — Jitsi Meet-powered video consultations launch directly from active appointments
+- **Appointment History** — Full record of past and upcoming consultations
+
+---
+
+### 👤 Patient Health Profile & Onboarding
+
+- **Guided Onboarding** — Multi-step registration capturing demographics, vitals, medical history, allergies, and current medications
+- **Health Dashboard** — Central hub displaying health metrics, recent consultations, and AI insights
+- **Profile-Aware AI** — All health profile data feeds into the AI context window for truly personalized medical guidance
+- **Role-Based Access** — Distinct workflows and features for patients vs. doctors
+
+---
+
+### 💉 Medication Tracker
+
+- Track active prescriptions with dosage schedules
+- Medication adherence monitoring
+- Integrates with the Drug Interaction Agent for safety checks against current medications
+
+---
+
+### 🌐 Real-Time Web Search
+
+- When the RAG knowledge base lacks sufficient information, queries automatically escalate to web search
+- Retrieves **current medical developments**, outbreak information, and time-sensitive health data
+- Results are processed through an LLM to generate structured, medically-grounded responses
+- Seamless fallback — users don't need to know which agent is responding
 
 ---
 
 ## 🛠️ Technology Stack
 
-The MedSage ecosystem incorporates a diverse array of modern libraries and frameworks spanning web development, deep learning, and vector databases.
+### Frontend
+| Category | Technologies |
+|----------|-------------|
+| Framework | Next.js 15 (React 19) · Turbopack |
+| Language | TypeScript |
+| Styling | Tailwind CSS v4 · Radix UI · Framer Motion |
+| State | Zustand · React Context |
+| Real-Time | Socket.io · Vapi AI Web SDK |
+| Charts | Recharts |
+| Auth | Clerk |
 
-### Frontend Technologies
-* **Framework**: Next.js 15 (React 19), Server Components, Turbopack
-* **Language**: TypeScript
-* **Styling**: Tailwind CSS v4, Tailwind Animate, Radix UI primitives
-* **State Management**: Zustand, React Context
-* **Real-time Communication**: Socket.io-client, Vapi AI Web
-* **Data Visualization**: Recharts, Framer Motion
+### Backend & AI
+| Category | Technologies |
+|----------|-------------|
+| Framework | FastAPI · Uvicorn |
+| Database | PostgreSQL · SQLModel · Alembic · asyncpg |
+| LLM Orchestration | LangChain · LangGraph |
+| Vector DBs | Qdrant · FAISS |
+| Computer Vision | PyTorch · TensorFlow · OpenCV · torchvision |
+| Document Processing | pdfplumber · PyPDF2 |
+| ML Deployment | Hugging Face Spaces |
 
-### Backend & AI Frameworks
-* **Framework**: FastAPI, Uvicorn
-* **Database & ORM**: PostgreSQL, SQLModel, Alembic, asyncpg
-* **LLM Orchestration**: LangChain, LangGraph, LlamaIndex
-* **Vector Databases**: Qdrant, FAISS (Local)
-* **Computer Vision**: PyTorch, torchvision, TensorFlow, OpenCV, python-multipart
-* **Document Processing**: pdfplumber, PyPDF2
-* **Audio Processing**: pydub
-
-### AI Models & Third-Party APIs
-* **Large Language Models**: Google Gemini (via `google-genai`), OpenAI API, OpenRouter, Groq
-* **Speech & Voice**: AssemblyAI, ElevenLabs, Murf AI
-* **Authentication**: Clerk (`@clerk/nextjs`)
+### AI Models & Services
+| Category | Services |
+|----------|----------|
+| LLMs | Google Gemini · OpenAI · OpenRouter · Groq |
+| Speech | AssemblyAI · ElevenLabs · Murf AI |
+| Vision | ViT (Brain Tumor) · Custom CNN (X-Ray) · Segmentation (Skin) |
 
 ---
 
-## 🔄 System Flow Summaries
+## 🔄 System Flow
 
-### Voice Conversation Pipeline
-1. **Audio Capture**: Browser Web Audio API securely streams microphone data.
-2. **Transcription**: AssemblyAI processes chunks into text in real-time.
-3. **Inference Engine**: Transcriptions passed to the FastAPI `/api/v1/chat` endpoint where the Multi-Agent framework queries patient history and formulates a response.
-4. **Vocalization**: The generated text is passed to the TTS service (ElevenLabs/Murf AI), returning an audio stream that is seamlessly played for the user while muting the microphone to avoid feedback loops.
+### Multi-Agent Query Pipeline
+
+```
+User Input
+    │
+    ├─── Input Guardrails ──── [blocked] ──→ Safety Response
+    │
+    ▼
+Analyze Input (image detection)
+    │
+    ├─── Has Image ──→ Image Type Classification
+    │                      ├── Brain MRI    → Brain Tumor Agent
+    │                      ├── Chest X-Ray  → X-Ray Agent
+    │                      └── Skin Lesion  → Skin Lesion Agent
+    │
+    └─── Text Only ──→ LLM Decision Router
+                           ├── Symptoms described    → Symptom Checker
+                           ├── Drug query            → Drug Interaction Agent
+                           ├── Medical knowledge     → RAG Agent
+                           │                            └── Low confidence? → Web Search Agent
+                           ├── Recent developments   → Web Search Agent
+                           └── General chat          → Conversation Agent
+                                                          │
+                                                          ▼
+                                                    Output Guardrails
+                                                          │
+                                                          ▼
+                                                    Response to User
+```
 
 ### Diagnostic Image Flow
-1. **Image Upload**: Doctor uploads an MRI/X-ray via drag-and-drop Next.js components.
-2. **Preprocessing**: Image sent to the `/api/v1/brain_tumor` or `/api/v1/xray` Python endpoint. OpenCV normalizes contrast and resizes the image for tensor compatibility.
-3. **Prediction**: PyTorch/TensorFlow models run localized inference against the structured medical dataset.
-4. **Report Generation**: A confident metric score paired with qualitative LLM-generated analysis is relayed back to the front-end dashboard.
+
+1. **Upload** — Doctor uploads MRI/X-ray via drag-and-drop
+2. **Preprocess** — OpenCV normalizes contrast and resizes for tensor compatibility
+3. **Inference** — PyTorch/TensorFlow models run on Hugging Face Spaces (GPU)
+4. **Report** — Confidence score + LLM-generated clinical narrative returned to dashboard
+5. **Validation** — Results flagged for healthcare professional review
 
 ### Document RAG Pipeline
-1. **Ingestion**: PDF report sent via frontend portal.
-2. **Chunking**: Text split into semantic overlapping chunks using `langchain-text-splitters`.
-3. **Embedding**: `sentence-transformers` creates dense vector representations.
-4. **Querying**: User asks a question about their report; the query is embedded, and k-nearest chunks are retrieved from the FAISS/Qdrant vector store to shape the LLM's response.
+
+1. **Ingest** — PDF uploaded via frontend
+2. **Chunk** — Semantic overlapping text splitting via LangChain
+3. **Embed** — Dense vectors via `sentence-transformers`
+4. **Store** — Indexed in FAISS/Qdrant
+5. **Query** — Natural language questions retrieve k-nearest chunks, shaped into LLM response
 
 ---
 
 ## 🚀 Future Scope
 
-* **Real-Time Clinical Resources**: Integration with live Electronic Health Records (EHR/FHIR) to synchronize patient vitals directly.
-* **Expanded Pathologies**: Extending computer vision models to assess additional specialties, such as retinal scans or dermatology imaging.
-* **Advanced Multi-Modal RAG**: Storing and retrieving visually rich documents (like annotated scans) alongside textual data for comprehensive generative responses.
+- **EHR/FHIR Integration** — Synchronize with live Electronic Health Records for real-time patient vitals
+- **Expanded Pathology Models** — Retinal scan analysis, dermatology imaging, and additional specialties
+- **Multi-Modal RAG** — Store and retrieve annotated medical images alongside textual data
+- **Federated Learning** — Privacy-preserving model improvements across institutions
+- **Mobile Application** — Native iOS/Android companion app
+
+---
+
+<p align="center">
+  <sub>Built with ❤️ for better healthcare through AI</sub>
+</p>
