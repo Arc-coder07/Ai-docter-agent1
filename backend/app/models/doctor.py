@@ -61,6 +61,7 @@ class Appointment(SQLModel, table=True):
     scheduled_at: datetime
     duration_minutes: int = Field(default=30)
     status: str = Field(default="scheduled")  # scheduled, completed, cancelled
+    payment_status: str = Field(default="pending")  # pending, paid, refunded
     meeting_room_id: str  # Jitsi room ID
     notes: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
