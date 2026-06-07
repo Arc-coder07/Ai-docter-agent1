@@ -12,7 +12,13 @@ from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from werkzeug.utils import secure_filename
+import re
+
+def secure_filename(filename: str) -> str:
+    """Secure a filename by removing unsafe characters."""
+    filename = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename)
+    filename = filename.strip('_')
+    return filename or "upload"
 
 from app.core.auth import get_current_user
 from app.db.engine import get_session
