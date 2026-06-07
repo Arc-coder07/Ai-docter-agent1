@@ -36,4 +36,4 @@ groq==0.9.0
 # General Fixes
 fpdf2>=2.7.0
 razorpay==2.0.1
-docling>=1.0.0
+docling==2.73.1
