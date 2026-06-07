@@ -6,7 +6,6 @@ Adapted for integration with main backend - uses shared env vars
 import os
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 
 # Load environment variables from .env file
@@ -51,7 +50,7 @@ class RAGConfig:
         
         # Local configuration
         self.vector_db_type = "qdrant"
-        self.embedding_dim = 384  # all-MiniLM-L6-v2 dimension
+        self.embedding_dim = 768  # models/text-embedding-004 dimension
         self.distance_metric = "Cosine"
         self.use_local = True
         self.vector_local_path = os.path.join(base_path, "data/qdrant_db")
@@ -64,9 +63,10 @@ class RAGConfig:
         self.chunk_size = 512
         self.chunk_overlap = 50
         
-        # Initialize HuggingFace Embeddings
-        self.embedding_model = HuggingFaceEmbeddings(
-            model_name="all-MiniLM-L6-v2"
+        # Initialize API-based Embeddings to save RAM
+        self.embedding_model = GoogleGenerativeAIEmbeddings(
+            model="models/text-embedding-004",
+            google_api_key=GOOGLE_API_KEY
         )
         
         # Use Gemini for RAG tasks to handle large contexts and avoid Groq rate limits

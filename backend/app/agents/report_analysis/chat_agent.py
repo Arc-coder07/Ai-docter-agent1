@@ -6,7 +6,7 @@ import os
 from typing import List, Dict, Optional
 from groq import Groq
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
 
 from .prompts import CHAT_SYSTEM_PROMPT
@@ -19,7 +19,11 @@ class ReportChatAgent:
     """
 
     def __init__(self):
-        self.embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        api_key = os.getenv("GOOGLE_API_KEY")
+        self.embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/text-embedding-004", 
+            google_api_key=api_key
+        )
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200
