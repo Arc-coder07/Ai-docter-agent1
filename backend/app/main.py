@@ -15,6 +15,7 @@ _default_origins = [
     "http://127.0.0.1:3001",
     "http://127.0.0.1:3002",
     "https://medsageai-lovat.vercel.app",
+    "https://medsage-ai.vercel.app",
 ]
 _extra = os.environ.get("CORS_ORIGINS", "")
 origins = _default_origins + [o.strip() for o in _extra.split(",") if o.strip()]
