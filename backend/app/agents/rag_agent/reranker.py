@@ -3,11 +3,11 @@ import re
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
-from sentence_transformers import CrossEncoder
 
 class Reranker:
     """
-    Reranks retrieved documents using a cross-encoder model for more accurate results.
+    Reranks retrieved documents. 
+    NOTE: Model-based reranking is temporarily disabled to prevent OOM errors on 512MB memory limits.
     """
     def __init__(self, config):
         """
@@ -18,17 +18,10 @@ class Reranker:
         """
         self.logger = logging.getLogger(__name__)
         
-        # Load the cross-encoder model for reranking
-        # For medical data, specialized models like 'pritamdeka/S-PubMedBert-MS-MARCO'
-        # would be ideal, but using a general one here for simplicity
-        try:
-            self.model_name = config.rag.reranker_model
-            self.logger.info(f"Loading reranker model: {self.model_name}")
-            self.model = CrossEncoder(self.model_name)
-            self.top_k = config.rag.reranker_top_k
-        except Exception as e:
-            self.logger.error(f"Error loading reranker model: {e}")
-            raise
+        self.model_name = config.rag.reranker_model
+        self.logger.info(f"Skipping reranker model load to save memory: {self.model_name}")
+        self.model = None
+        self.top_k = config.rag.reranker_top_k
     
     def rerank(self, query: str, documents: Union[List[Dict[str, Any]], List[str]], parsed_content_dir: str) -> List[Dict[str, Any]]:
         """
@@ -75,11 +68,9 @@ class Reranker:
                             else:
                                 doc["content"] = f"Document {i}"
             
-            # Create query-document pairs for scoring
-            pairs = [(query, doc["content"]) for doc in documents]
-            
+            # Skip model prediction since model is disabled
             # Get relevance scores
-            scores = self.model.predict(pairs)
+            scores = [doc.get("score", 1.0) for doc in documents]
             
             # Add scores to documents
             for i, score in enumerate(scores):
@@ -88,7 +79,7 @@ class Reranker:
                 if "score" not in documents[i]:
                     documents[i]["score"] = 1.0
                 # Combine (average) the original score and rerank score
-                documents[i]["combined_score"] = (documents[i]["score"] + float(score)) / 2
+                documents[i]["combined_score"] = float(score)
             
             # Sort by combined score
             reranked_docs = sorted(documents, key=lambda x: x["combined_score"], reverse=True)
